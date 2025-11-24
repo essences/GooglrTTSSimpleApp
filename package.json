@@ -1,0 +1,22 @@
+{
+  "name": "googlrttssimpleapp",
+  "version": "1.0.0",
+  "description": "研修ナレーションスタジオ - Gemini TTS を使った音声生成アプリ",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:smoke": "playwright test regression-smoke",
+    "test:api-key": "playwright test api-key-management",
+    "test:report": "playwright show-report"
+  },
+  "keywords": ["tts", "gemini", "audio", "narration"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.56.1"
+  }
+}
