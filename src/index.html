@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>研修ナレーションスタジオ</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- APIキー入力モーダル -->
+  <div id="api-key-modal" class="modal" data-testid="api-key-modal">
+    <div class="modal-content">
+      <h2 data-testid="modal-title">APIキー設定</h2>
+      <p>Gemini API キーを入力してください</p>
+
+      <div class="form-group">
+        <label for="api-key-input">API Key</label>
+        <input
+          type="password"
+          id="api-key-input"
+          data-testid="api-key-input"
+          placeholder="AIzaSy..."
+          autocomplete="off"
+        >
+      </div>
+
+      <div class="validation-error" data-testid="validation-error" style="display: none;"></div>
+      <div class="error-message" data-testid="error-message" style="display: none;"></div>
+      <div class="success-message" data-testid="success-message" style="display: none;"></div>
+
+      <div class="loading" data-testid="loading" style="display: none;">
+        <span class="spinner"></span> 検証中...
+      </div>
+
+      <button
+        id="save-api-key-button"
+        data-testid="save-api-key-button"
+        class="btn btn-primary"
+      >
+        保存
+      </button>
+    </div>
+  </div>
+
+  <!-- メインアプリ -->
+  <div id="main-app" data-testid="main-app" style="display: none;">
+    <header>
+      <h1>研修ナレーションスタジオ</h1>
+      <div class="actions">
+        <button data-testid="help-button" class="btn-icon" title="ヘルプ">?</button>
+        <button data-testid="settings-button" class="btn-icon" title="設定">⚙</button>
+      </div>
+    </header>
+
+    <!-- 原稿入力セクション -->
+    <section class="card" data-testid="script-section">
+      <div class="toolbar">
+        <button data-testid="import-txt-button" class="btn">Import TXT</button>
+        <button data-testid="sample-script-button" class="btn">Sample Script</button>
+        <span class="char-count">
+          文字数: <span data-testid="char-count">0</span>
+        </span>
+      </div>
+      <textarea
+        id="script-textarea"
+        data-testid="script-textarea"
+        placeholder="Joe: Welcome to the onboarding deck...&#10;Jane: Thanks Joe! Today we'll cover..."
+        rows="10"
+      ></textarea>
+    </section>
+
+    <!-- 2カラムレイアウト -->
+    <div class="two-column">
+      <!-- 左カラム: スピーカー設定 -->
+      <div class="card" data-testid="speaker-settings">
+        <h2>Speaker & Style Setup</h2>
+
+        <!-- Speaker A -->
+        <div class="speaker-box" data-testid="speaker-a-section">
+          <h3>Speaker A</h3>
+          <label for="speaker-a-name">名前タグ</label>
+          <input
+            type="text"
+            id="speaker-a-name"
+            data-testid="speaker-a-name"
+            placeholder="Joe"
+          >
+
+          <label for="speaker-a-voice">Voice preset</label>
+          <div class="inline">
+            <select id="speaker-a-voice" data-testid="speaker-a-voice">
+              <option value="Kore">Kore (Firm)</option>
+              <option value="Puck">Puck (Upbeat)</option>
+              <option value="Zephyr">Zephyr (Bright)</option>
+              <option value="Autonoe">Autonoe (Bright)</option>
+              <option value="Orus">Orus (Firm)</option>
+              <option value="Alnilam">Alnilam (Firm)</option>
+              <option value="Umbriel">Umbriel (Easy-going)</option>
+              <option value="Charon">Charon (Informative)</option>
+              <option value="Leda">Leda (Young)</option>
+            </select>
+            <button data-testid="preview-voice-a" class="btn-small">▶ 試聴</button>
+          </div>
+
+          <label for="speaker-a-style">Style memo</label>
+          <input
+            type="text"
+            id="speaker-a-style"
+            data-testid="speaker-a-style"
+            placeholder="cheerful, confident"
+          >
+        </div>
+
+        <!-- Speaker B -->
+        <div class="speaker-box" data-testid="speaker-b-section">
+          <h3>Speaker B</h3>
+          <label for="speaker-b-name">名前タグ</label>
+          <input
+            type="text"
+            id="speaker-b-name"
+            data-testid="speaker-b-name"
+            placeholder="Jane"
+          >
+
+          <label for="speaker-b-voice">Voice preset</label>
+          <div class="inline">
+            <select id="speaker-b-voice" data-testid="speaker-b-voice">
+              <option value="Puck">Puck (Upbeat)</option>
+              <option value="Kore">Kore (Firm)</option>
+              <option value="Zephyr">Zephyr (Bright)</option>
+              <option value="Autonoe">Autonoe (Bright)</option>
+              <option value="Orus">Orus (Firm)</option>
+              <option value="Alnilam">Alnilam (Firm)</option>
+              <option value="Umbriel">Umbriel (Easy-going)</option>
+              <option value="Charon">Charon (Informative)</option>
+              <option value="Leda">Leda (Young)</option>
+            </select>
+            <button data-testid="preview-voice-b" class="btn-small">▶ 試聴</button>
+          </div>
+
+          <label for="speaker-b-style">Style memo</label>
+          <input
+            type="text"
+            id="speaker-b-style"
+            data-testid="speaker-b-style"
+            placeholder="upbeat, friendly"
+          >
+        </div>
+      </div>
+
+      <!-- 右カラム: 生成設定 -->
+      <div class="card" data-testid="generation-settings">
+        <h2>Generation Settings</h2>
+
+        <label for="output-format">Output format</label>
+        <select id="output-format" data-testid="output-format">
+          <option value="wav">WAV</option>
+          <option value="wav+mp3">WAV + MP3</option>
+        </select>
+
+        <label for="temperature">温度 (再現性)</label>
+        <div class="inline">
+          <span>0.2</span>
+          <input
+            type="range"
+            id="temperature"
+            data-testid="temperature"
+            min="0.2"
+            max="0.9"
+            step="0.05"
+            value="0.6"
+          >
+          <span id="temperature-value" data-testid="temperature-value">0.6</span>
+          <span>0.9</span>
+        </div>
+
+        <label for="section-split">セクション分割</label>
+        <select id="section-split" data-testid="section-split">
+          <option value="auto">章ごとに自動分割</option>
+          <option value="slide">スライド単位</option>
+        </select>
+
+        <label>API Key</label>
+        <input
+          type="text"
+          data-testid="api-key-display"
+          disabled
+          value="Connected"
+          class="api-key-status"
+        >
+
+        <button
+          id="generate-button"
+          data-testid="generate-button"
+          class="btn btn-primary btn-large"
+        >
+          音声を生成する
+        </button>
+
+        <div class="progress" data-testid="progress-bar" style="display: none;">
+          <div class="progress-bar" id="progress-bar-fill"></div>
+        </div>
+
+        <div data-testid="generation-complete" style="display: none;">
+          生成完了！
+        </div>
+      </div>
+    </div>
+
+    <!-- セクションプレビュー -->
+    <section class="card" data-testid="section-preview" style="display: none;">
+      <h2>Section Preview</h2>
+      <p>Slide <span id="current-section">01</span> / <span id="total-sections">01</span></p>
+
+      <div class="audio-player-container" data-testid="audio-player">
+        <audio id="audio-element" controls></audio>
+      </div>
+
+      <div class="section-actions">
+        <button data-testid="play-button" class="btn">▶ Play</button>
+        <button data-testid="pause-button" class="btn" style="display: none;">⏸ Pause</button>
+        <button data-testid="regenerate-button" class="btn">↺ Re-generate this section</button>
+        <button data-testid="download-button" class="btn">⬇ Download WAV</button>
+      </div>
+    </section>
+
+    <!-- 履歴 -->
+    <section class="card">
+      <h2>Output History</h2>
+      <table data-testid="history-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Timestamp</th>
+            <th>Sections</th>
+            <th>Format</th>
+            <th>Duration</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="history-tbody">
+          <!-- 履歴がここに追加される -->
+        </tbody>
+      </table>
+    </section>
+
+    <footer>
+      API quota: <span id="api-quota">--</span> calls remaining ·
+      Storage used: <span id="storage-used">0 MB</span>
+    </footer>
+  </div>
+
+  <!-- 設定モーダル -->
+  <div id="settings-modal" class="modal" data-testid="settings-modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>設定</h2>
+        <button data-testid="close-settings-button" class="btn-close">×</button>
+      </div>
+
+      <div class="form-group">
+        <label>API Key</label>
+        <input
+          type="text"
+          data-testid="api-key-display"
+          value="****...****"
+          disabled
+        >
+      </div>
+
+      <button data-testid="test-api-key-button" class="btn">APIキーをテスト</button>
+      <div data-testid="testing-indicator" style="display: none;">テスト中...</div>
+      <div data-testid="test-success-message" style="display: none;"></div>
+
+      <button data-testid="delete-api-key-button" class="btn btn-danger">APIキーを削除</button>
+    </div>
+  </div>
+
+  <!-- 確認ダイアログ -->
+  <div id="confirm-dialog" class="modal" data-testid="confirm-dialog" style="display: none;">
+    <div class="modal-content">
+      <h2>確認</h2>
+      <p id="confirm-message">本当に削除しますか？</p>
+      <div class="modal-actions">
+        <button data-testid="cancel-button" class="btn">キャンセル</button>
+        <button data-testid="confirm-delete-button" class="btn btn-danger">削除</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
