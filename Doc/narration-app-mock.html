@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>研修ナレーションスタジオ - Mock</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root {
+      font-family: "Segoe UI", "Hiragino Sans", sans-serif;
+      color: #1f1f1f;
+      background: #f4f6f8;
+    }
+    body {
+      margin: 0;
+      padding: 0 32px 48px;
+      background: #f4f6f8;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 24px 0 16px;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.4rem;
+    }
+    header .actions button {
+      margin-left: 8px;
+      border: none;
+      background: #fff;
+      border-radius: 6px;
+      padding: 8px 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      cursor: pointer;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(15,23,42,.08);
+      margin-bottom: 20px;
+      padding: 20px;
+    }
+    .card h2 {
+      margin-top: 0;
+      font-size: 1rem;
+      color: #3b3b3b;
+    }
+    textarea {
+      width: 100%;
+      min-height: 180px;
+      border-radius: 8px;
+      border: 1px solid #d0d7e2;
+      padding: 12px;
+      font-size: .95rem;
+      resize: vertical;
+      background: #fafbfd;
+    }
+    .toolbar {
+      margin: 8px 0 12px;
+    }
+    .toolbar button {
+      border: 1px solid #d0d7e2;
+      background: #fff;
+      border-radius: 6px;
+      padding: 6px 10px;
+      margin-right: 8px;
+      cursor: pointer;
+    }
+    .two-column {
+      display: grid;
+      grid-template-columns: 3fr 2fr;
+      grid-gap: 20px;
+    }
+    .speaker-box {
+      border: 1px solid #e3e7ef;
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      background: #fafafa;
+    }
+    .speaker-box h3 {
+      margin: 0 0 8px;
+      font-size: .92rem;
+      color: #4b5563;
+    }
+    label {
+      display: block;
+      font-size: .85rem;
+      color: #5f6b7c;
+      margin-top: 8px;
+    }
+    input, select {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid #d1d9e6;
+      background: #fff;
+      font-size: .9rem;
+    }
+    .inline {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .inline input[type="range"] {
+      flex: 1;
+    }
+    .primary {
+      width: 100%;
+      padding: 14px;
+      font-size: 1rem;
+      color: #fff;
+      background: #2563eb;
+      border: none;
+      border-radius: 10px;
+      margin-top: 12px;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(37,99,235,.25);
+    }
+    .progress {
+      margin-top: 12px;
+      background: #e2e8f0;
+      border-radius: 999px;
+      height: 10px;
+      overflow: hidden;
+    }
+    .progress span {
+      display: block;
+      height: 100%;
+      width: 60%;
+      background: linear-gradient(90deg,#60a5fa,#2563eb);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .9rem;
+    }
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+    }
+    th {
+      color: #64748b;
+      font-weight: 600;
+    }
+    .history-actions button {
+      border: none;
+      background: transparent;
+      color: #2563eb;
+      cursor: pointer;
+      margin-right: 6px;
+    }
+    footer {
+      font-size: .8rem;
+      color: #94a3b8;
+      text-align: right;
+      margin-top: 24px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>研修ナレーションスタジオ</h1>
+    <div class="actions">
+      <button>?</button>
+      <button>⚙</button>
+    </div>
+  </header>
+
+  <section class="card">
+    <div class="toolbar">
+      <button>Import TXT</button>
+      <button>Sample Script</button>
+      <span style="float:right;color:#94a3b8;">Char Count: 1,342</span>
+    </div>
+    <textarea placeholder="Joe: Welcome to the onboarding deck...&#10;Jane: Thanks Joe! Today we'll cover..."></textarea>
+  </section>
+
+  <section class="two-column">
+    <div class="card">
+      <h2>Speaker &amp; Style Setup</h2>
+      <div class="speaker-box">
+        <h3>Speaker A</h3>
+        <label>名前タグ</label>
+        <input value="Joe" />
+        <label>Voice preset</label>
+        <div class="inline">
+          <select>
+            <option>Kore (Firm)</option>
+            <option>Puck (Upbeat)</option>
+            <option>Zephyr (Bright)</option>
+          </select>
+          <button style="width:80px;">▶ 試聴</button>
+        </div>
+        <label>Style memo</label>
+        <input placeholder="cheerful, confident" />
+      </div>
+
+      <div class="speaker-box">
+        <h3>Speaker B</h3>
+        <label>名前タグ</label>
+        <input value="Jane" />
+        <label>Voice preset</label>
+        <div class="inline">
+          <select>
+            <option>Puck (Upbeat)</option>
+            <option>Kore (Firm)</option>
+            <option>Umbriel (Easy-going)</option>
+          </select>
+          <button style="width:80px;">▶ 試聴</button>
+        </div>
+        <label>Style memo</label>
+        <input placeholder="upbeat, friendly" />
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Generation Settings</h2>
+      <label>Output format</label>
+      <select>
+        <option>WAV</option>
+        <option>WAV + MP3</option>
+      </select>
+
+      <label>温度 (再現性)</label>
+      <div class="inline">
+        <span>0.2</span>
+        <input type="range" min="0" max="1" step="0.05" value="0.6" />
+        <span>0.9</span>
+      </div>
+
+      <label>セクション分割</label>
+      <select>
+        <option>章ごとに自動分割</option>
+        <option>スライド単位</option>
+      </select>
+
+      <label>Safety profile</label>
+      <select>
+        <option>Default</option>
+        <option>Custom policy</option>
+      </select>
+
+      <label>API Key</label>
+      <input value="Connected" disabled />
+
+      <button class="primary">音声を生成する</button>
+      <div class="progress"><span></span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Section Preview</h2>
+    <p style="color:#64748b;margin-bottom:16px;">Slide 02 / 05</p>
+    <div style="height:70px;border:1px dashed #cbd5f5;border-radius:8px;margin-bottom:12px;background:#f8fbff;"></div>
+    <button style="margin-right:8px;">▶ Play</button>
+    <button style="margin-right:8px;">↺ Re-generate this section</button>
+    <button>Download WAV</button>
+  </section>
+
+  <section class="card">
+    <h2>Output History</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Timestamp</th>
+          <th>Sections</th>
+          <th>Format</th>
+          <th>Duration</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>2</td>
+          <td>2025-11-21 10:42</td>
+          <td>03</td>
+          <td>WAV + MP3</td>
+          <td>04:12</td>
+          <td class="history-actions">
+            <button>▶</button>
+            <button>⬇</button>
+            <button>↺</button>
+            <button>🗑</button>
+          </td>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td>2025-11-20 18:07</td>
+          <td>05</td>
+          <td>WAV</td>
+          <td>07:45</td>
+          <td class="history-actions">
+            <button>▶</button>
+            <button>⬇</button>
+            <button>↺</button>
+            <button>🗑</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>
+    API quota: 87 calls remaining · Storage used: 120 MB
+  </footer>
+</body>
+</html>
