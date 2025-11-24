@@ -105,9 +105,9 @@
 **ストーリー**: ユーザーとして、サンプル原稿を読み込んで使い方を理解したい
 
 **受入基準**:
-- [ ] 「Sample Script」ボタンをクリックするとサンプルが読み込まれる
-- [ ] サンプルは2話者の会話形式
-- [ ] サンプルロード前に確認ダイアログが表示される（既存テキストがある場合）
+- [x] 「Sample Script」ボタンをクリックするとサンプルが読み込まれる
+- [x] サンプルは2話者の会話形式
+- [x] サンプルロード前に確認ダイアログが表示される（既存テキストがある場合）
 
 **見積もり**: 2 SP
 
@@ -117,6 +117,11 @@ Joe: Welcome to the onboarding deck. Today we'll cover the basics.
 Jane: Thanks Joe! I'm excited to learn about our platform.
 Joe: Let's start with the dashboard overview...
 ```
+
+**進捗メモ (2025-11-24)**:
+- `src/js/app.js` で SAMPLE_SCRIPT 定数を追加し、「Sample Script」ボタンから読み込む実装を完了
+- 既存原稿がある場合は共通の確認ダイアログを使って置き換え可否を確認
+- 読み込み後は文字数カウントとフォーカスを更新し、直ちに編集を再開できる
 
 ---
 

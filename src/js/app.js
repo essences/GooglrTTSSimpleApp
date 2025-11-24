@@ -11,6 +11,10 @@ const STORAGE_KEY_HISTORY = 'narration_history';
 const API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const API_VALIDATION_MODEL = 'gemini-2.5-flash-preview-tts';
 const API_VALIDATION_TIMEOUT_MS = 8000;
+const SAMPLE_SCRIPT = `Joe: Welcome to the onboarding deck. Today we'll cover the basics.
+Jane: Thanks Joe! I'm excited to learn about our platform.
+Joe: Let's start with the dashboard overview, then dive into workflows.
+Jane: Sounds good. I'll take notes for the team recap later.`;
 
 // グローバル状態
 const appState = {
@@ -40,6 +44,7 @@ const elements = {
   scriptTextarea: document.getElementById('script-textarea'),
   charCount: document.querySelector('[data-testid="char-count"]'),
   generateButton: document.getElementById('generate-button'),
+  sampleScriptButton: document.querySelector('[data-testid="sample-script-button"]'),
   settingsButton: document.querySelector('[data-testid="settings-button"]'),
   settingsModal: document.getElementById('settings-modal'),
   closeSettingsButton: document.querySelector('[data-testid="close-settings-button"]'),
@@ -50,7 +55,12 @@ const elements = {
   confirmDialog: document.getElementById('confirm-dialog'),
   confirmMessage: document.getElementById('confirm-message'),
   cancelButton: document.querySelector('[data-testid="cancel-button"]'),
-  confirmDeleteButton: document.querySelector('[data-testid="confirm-delete-button"]')
+  confirmPrimaryButton: document.querySelector('[data-testid="confirm-primary-button"]')
+};
+
+const confirmButtonDefaults = {
+  text: elements.confirmPrimaryButton?.textContent || 'OK',
+  variant: 'primary'
 };
 
 /**
@@ -153,6 +163,11 @@ function setupEventListeners() {
     }
   });
 
+  // サンプルスクリプト読み込み
+  if (elements.sampleScriptButton) {
+    elements.sampleScriptButton.addEventListener('click', handleSampleScriptRequest);
+  }
+
   // APIキーのテスト
   if (elements.testApiKeyButton) {
     elements.testApiKeyButton.addEventListener('click', handleTestApiKey);
@@ -168,8 +183,8 @@ function setupEventListeners() {
     elements.cancelButton.addEventListener('click', closeConfirmDialog);
   }
 
-  if (elements.confirmDeleteButton) {
-    elements.confirmDeleteButton.addEventListener('click', () => {
+  if (elements.confirmPrimaryButton) {
+    elements.confirmPrimaryButton.addEventListener('click', () => {
       if (typeof pendingConfirmAction === 'function') {
         pendingConfirmAction();
       }
@@ -369,7 +384,10 @@ function handleDeleteApiKeyRequest() {
     return;
   }
 
-  openConfirmDialog('保存されたAPIキーを削除しますか？', deleteStoredApiKey);
+  openConfirmDialog('保存されたAPIキーを削除しますか？', deleteStoredApiKey, {
+    confirmText: '削除',
+    variant: 'danger'
+  });
 }
 
 /**
@@ -418,9 +436,10 @@ function hideSettingsFeedback() {
 /**
  * 確認ダイアログ制御
  */
-function openConfirmDialog(message, onConfirm) {
+function openConfirmDialog(message, onConfirm, options = {}) {
   if (!elements.confirmDialog || !elements.confirmMessage) return;
   elements.confirmMessage.textContent = message;
+  configureConfirmButton(options);
   elements.confirmDialog.style.display = 'flex';
   pendingConfirmAction = onConfirm;
 }
@@ -429,6 +448,41 @@ function closeConfirmDialog() {
   if (!elements.confirmDialog) return;
   elements.confirmDialog.style.display = 'none';
   pendingConfirmAction = null;
+  configureConfirmButton(confirmButtonDefaults);
+}
+
+function configureConfirmButton({ confirmText, variant } = {}) {
+  if (!elements.confirmPrimaryButton) return;
+  elements.confirmPrimaryButton.textContent = confirmText || confirmButtonDefaults.text;
+  elements.confirmPrimaryButton.classList.remove('btn-danger', 'btn-primary');
+  const selectedVariant = variant || confirmButtonDefaults.variant;
+  if (selectedVariant === 'danger') {
+    elements.confirmPrimaryButton.classList.add('btn-danger');
+  } else {
+    elements.confirmPrimaryButton.classList.add('btn-primary');
+  }
+}
+
+/**
+ * サンプルスクリプト読み込み
+ */
+function handleSampleScriptRequest() {
+  const existing = elements.scriptTextarea.value.trim();
+  if (existing.length > 0 && existing !== SAMPLE_SCRIPT.trim()) {
+    openConfirmDialog(
+      '現在の原稿をサンプルスクリプトで置き換えます。よろしいですか？',
+      applySampleScript,
+      { confirmText: '読み込む', variant: 'primary' }
+    );
+    return;
+  }
+  applySampleScript();
+}
+
+function applySampleScript() {
+  elements.scriptTextarea.value = SAMPLE_SCRIPT;
+  updateCharCount();
+  elements.scriptTextarea.focus();
 }
 
 /**
