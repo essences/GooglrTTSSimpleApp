@@ -1,11 +1,16 @@
+import { GeminiTtsClient } from './api-client.js';
+
 /**
  * 研修ナレーションスタジオ - メインアプリケーション
- * PBI-001: プロジェクト初期セットアップ
+ * PBI-001: プロジェクト初期セットアップ / PBI-002: APIキー管理
  */
 
 // 定数定義
 const STORAGE_KEY_API_KEY = 'gemini_api_key';
 const STORAGE_KEY_HISTORY = 'narration_history';
+const API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+const API_VALIDATION_MODEL = 'gemini-2.5-flash-preview-tts';
+const API_VALIDATION_TIMEOUT_MS = 8000;
 
 // グローバル状態
 const appState = {
@@ -23,6 +28,9 @@ const appState = {
   history: []
 };
 
+let pendingConfirmAction = null;
+const geminiClient = new GeminiTtsClient();
+
 // DOM要素
 const elements = {
   apiKeyModal: document.getElementById('api-key-modal'),
@@ -34,7 +42,15 @@ const elements = {
   generateButton: document.getElementById('generate-button'),
   settingsButton: document.querySelector('[data-testid="settings-button"]'),
   settingsModal: document.getElementById('settings-modal'),
-  closeSettingsButton: document.querySelector('[data-testid="close-settings-button"]')
+  closeSettingsButton: document.querySelector('[data-testid="close-settings-button"]'),
+  testApiKeyButton: document.querySelector('[data-testid="test-api-key-button"]'),
+  testingIndicator: document.querySelector('[data-testid="testing-indicator"]'),
+  testResultMessage: document.querySelector('[data-testid="test-success-message"]'),
+  deleteApiKeyButton: document.querySelector('[data-testid="delete-api-key-button"]'),
+  confirmDialog: document.getElementById('confirm-dialog'),
+  confirmMessage: document.getElementById('confirm-message'),
+  cancelButton: document.querySelector('[data-testid="cancel-button"]'),
+  confirmDeleteButton: document.querySelector('[data-testid="confirm-delete-button"]')
 };
 
 /**
@@ -49,6 +65,7 @@ function initApp() {
   if (storedApiKey) {
     // APIキーが保存されている場合
     appState.apiKey = storedApiKey;
+    geminiClient.setApiKey(storedApiKey);
     showMainApp();
   } else {
     // APIキーが未設定の場合、モーダルを表示
@@ -75,14 +92,7 @@ function showApiKeyModal() {
 function showMainApp() {
   elements.apiKeyModal.style.display = 'none';
   elements.mainApp.style.display = 'block';
-
-  // APIキーステータスを更新
-  const apiKeyDisplays = document.querySelectorAll('[data-testid="api-key-display"]');
-  apiKeyDisplays.forEach(display => {
-    if (!display.disabled) {
-      display.value = maskApiKey(appState.apiKey);
-    }
-  });
+  updateApiKeyDisplays();
 }
 
 /**
@@ -143,6 +153,30 @@ function setupEventListeners() {
     }
   });
 
+  // APIキーのテスト
+  if (elements.testApiKeyButton) {
+    elements.testApiKeyButton.addEventListener('click', handleTestApiKey);
+  }
+
+  // APIキー削除
+  if (elements.deleteApiKeyButton) {
+    elements.deleteApiKeyButton.addEventListener('click', handleDeleteApiKeyRequest);
+  }
+
+  // 確認ダイアログ操作
+  if (elements.cancelButton) {
+    elements.cancelButton.addEventListener('click', closeConfirmDialog);
+  }
+
+  if (elements.confirmDeleteButton) {
+    elements.confirmDeleteButton.addEventListener('click', () => {
+      if (typeof pendingConfirmAction === 'function') {
+        pendingConfirmAction();
+      }
+      closeConfirmDialog();
+    });
+  }
+
   console.log('イベントリスナー設定完了');
 }
 
@@ -169,27 +203,19 @@ async function handleSaveApiKey() {
   showLoading(true);
 
   try {
-    // API検証（簡易版）
-    // 注: 実際のAPI検証はPBI-003で実装
-    console.log('APIキー検証中...', apiKey.substring(0, 10) + '...');
+    await validateApiKey(apiKey);
 
-    // 仮の検証（実装後は実際のAPI呼び出しに置き換え）
-    const isValid = await validateApiKey(apiKey);
+    // localStorageに保存
+    localStorage.setItem(STORAGE_KEY_API_KEY, apiKey);
+    appState.apiKey = apiKey;
+    geminiClient.setApiKey(apiKey);
 
-    if (isValid) {
-      // localStorageに保存
-      localStorage.setItem(STORAGE_KEY_API_KEY, apiKey);
-      appState.apiKey = apiKey;
+    showMessage('success-message', 'APIキーが保存されました');
 
-      showMessage('success-message', 'APIキーが保存されました');
-
-      // 2秒後にメインアプリを表示
-      setTimeout(() => {
-        showMainApp();
-      }, 2000);
-    } else {
-      showMessage('error-message', 'APIキーが無効です。正しいAPIキーを入力してください。');
-    }
+    // 2秒後にメインアプリを表示
+    setTimeout(() => {
+      showMainApp();
+    }, 2000);
   } catch (error) {
     console.error('APIキー検証エラー:', error);
     showMessage('error-message', `エラーが発生しました: ${error.message}`);
@@ -199,13 +225,47 @@ async function handleSaveApiKey() {
 }
 
 /**
- * APIキーを検証（仮実装）
- * PBI-003で実際のAPI呼び出しに置き換え
+ * APIキーを検証
+ * モデル取得APIを呼び出して認証チェックを行う
  */
 async function validateApiKey(apiKey) {
-  // 仮の検証: AIzaSyで始まる場合は有効とする
-  await new Promise(resolve => setTimeout(resolve, 1000)); // 1秒待つ
-  return apiKey.startsWith('AIzaSy');
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), API_VALIDATION_TIMEOUT_MS);
+  const endpoint = `${API_BASE_URL}/${API_VALIDATION_MODEL}?key=${encodeURIComponent(apiKey)}`;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      signal: controller.signal
+    });
+
+    if (response.ok) {
+      return true;
+    }
+
+    let errorMessage = `HTTP ${response.status}`;
+    try {
+      const errorBody = await response.json();
+      if (errorBody?.error?.message) {
+        errorMessage = errorBody.error.message;
+      }
+    } catch {
+      // ignore JSON parse errors
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error('APIキーが無効か、権限がありません。Gemini API キーを確認してください。');
+    }
+
+    throw new Error(`APIキー検証に失敗しました: ${errorMessage}`);
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('APIキー検証がタイムアウトしました。通信環境を確認してください。');
+    }
+    throw new Error(error.message || 'APIキー検証に失敗しました。');
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 /**
@@ -258,6 +318,117 @@ function updateCharCount() {
   const text = elements.scriptTextarea.value;
   appState.currentScript = text;
   elements.charCount.textContent = text.length.toLocaleString();
+}
+
+/**
+ * APIキーステータス表示を更新
+ */
+function updateApiKeyDisplays() {
+  const apiKeyDisplays = document.querySelectorAll('[data-testid="api-key-display"]');
+  apiKeyDisplays.forEach(display => {
+    if (display.classList.contains('api-key-status')) {
+      display.value = appState.apiKey ? 'Connected' : 'Not connected';
+    } else {
+      display.value = appState.apiKey ? maskApiKey(appState.apiKey) : '未設定';
+    }
+  });
+}
+
+/**
+ * APIキーテスト処理
+ */
+async function handleTestApiKey() {
+  hideSettingsFeedback();
+
+  if (!appState.apiKey) {
+    showSettingsFeedback('APIキーが設定されていません。', false);
+    return;
+  }
+
+  setTestingState(true);
+
+  try {
+    await validateApiKey(appState.apiKey);
+    showSettingsFeedback('APIキーは有効です。', true);
+  } catch (error) {
+    console.error('APIキーのテストに失敗しました:', error);
+    showSettingsFeedback(error.message || 'APIキーのテストに失敗しました。', false);
+  } finally {
+    setTestingState(false);
+  }
+}
+
+/**
+ * APIキー削除フロー開始
+ */
+function handleDeleteApiKeyRequest() {
+  hideSettingsFeedback();
+
+  if (!appState.apiKey) {
+    showSettingsFeedback('削除するAPIキーがありません。', false);
+    return;
+  }
+
+  openConfirmDialog('保存されたAPIキーを削除しますか？', deleteStoredApiKey);
+}
+
+/**
+ * APIキー削除
+ */
+function deleteStoredApiKey() {
+  localStorage.removeItem(STORAGE_KEY_API_KEY);
+  appState.apiKey = null;
+  geminiClient.setApiKey(null);
+  elements.apiKeyInput.value = '';
+  updateApiKeyDisplays();
+  hideSettingsFeedback();
+  elements.settingsModal.style.display = 'none';
+  showApiKeyModal();
+  showMessage('success-message', 'APIキーを削除しました。新しいキーを入力してください。');
+}
+
+/**
+ * 設定モーダルのテスト進行状態切り替え
+ */
+function setTestingState(isTesting) {
+  if (elements.testingIndicator) {
+    elements.testingIndicator.style.display = isTesting ? 'block' : 'none';
+  }
+  if (elements.testApiKeyButton) {
+    elements.testApiKeyButton.disabled = isTesting;
+  }
+}
+
+/**
+ * 設定モーダルのメッセージ表示
+ */
+function showSettingsFeedback(message, isSuccess) {
+  if (!elements.testResultMessage) return;
+  elements.testResultMessage.textContent = message;
+  elements.testResultMessage.style.display = 'block';
+  elements.testResultMessage.style.color = isSuccess ? '#15803d' : '#b91c1c';
+}
+
+function hideSettingsFeedback() {
+  if (!elements.testResultMessage) return;
+  elements.testResultMessage.style.display = 'none';
+  elements.testResultMessage.textContent = '';
+}
+
+/**
+ * 確認ダイアログ制御
+ */
+function openConfirmDialog(message, onConfirm) {
+  if (!elements.confirmDialog || !elements.confirmMessage) return;
+  elements.confirmMessage.textContent = message;
+  elements.confirmDialog.style.display = 'flex';
+  pendingConfirmAction = onConfirm;
+}
+
+function closeConfirmDialog() {
+  if (!elements.confirmDialog) return;
+  elements.confirmDialog.style.display = 'none';
+  pendingConfirmAction = null;
 }
 
 /**

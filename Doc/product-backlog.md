@@ -34,12 +34,12 @@
 **ストーリー**: ユーザーとして、Gemini API キーを安全に保存・管理し、API接続を確認できるようにしたい
 
 **受入基準**:
-- [ ] API キー入力フォームが表示される
-- [ ] 入力したAPI キーが localStorage に保存される
-- [ ] 保存済みAPI キーの読み込みができる
-- [ ] API キー検証機能（テストリクエスト）が動作する
-- [ ] API キー削除ボタンが機能する
-- [ ] API キーがマスク表示される（セキュリティ）
+- [x] API キー入力フォームが表示される
+- [x] 入力したAPI キーが localStorage に保存される
+- [x] 保存済みAPI キーの読み込みができる
+- [x] API キー検証機能（テストリクエスト）が動作する
+- [x] API キー削除ボタンが機能する
+- [x] API キーがマスク表示される（セキュリティ）
 
 **見積もり**: 5 SP
 
@@ -47,6 +47,11 @@
 - localStorage key: `gemini_api_key`
 - 検証: 簡単なTTSリクエストを送信して200応答を確認
 - セキュリティ: XSS対策、CSP設定
+
+**進捗メモ (2025-11-24)**:
+- `src/index.html` と `src/js/app.js` にてAPIキー保存/読込/検証/削除UIを実装し、実際のGeminiモデル取得APIでキー検証を行う
+- 設定モーダルからAPIキーのテスト、削除、マスク表示を可能にし、localStorage連携を完了
+- 次は PBI-003 (APIクライアント実装) で生成処理に着手予定
 
 ---
 
@@ -67,6 +72,11 @@
 - エンドポイント: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent`
 - 音声形式: 24kHz PCM 16-bit mono
 - エラー型: 401 (認証), 429 (レート制限), 400 (リクエストエラー)
+
+**進捗メモ (2025-11-24)**:
+- `src/js/api-client.js` に `GeminiTtsClient` を追加し、単一/複数話者TTS、エラーハンドリング、Base64→WAV Blob 変換を実装
+- `src/js/app.js` からクライアントをimportし、APIキー設定時にクライアントへ伝播
+- 次は generate ボタンフローからクライアントを呼び出し、実際の音声生成を連携する
 
 ---
 
