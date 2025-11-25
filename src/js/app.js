@@ -17,6 +17,13 @@ Joe: Let's start with the dashboard overview, then dive into workflows.
 Jane: Sounds good. I'll take notes for the team recap later.`;
 const VOICE_PREVIEW_TEXT = 'こんにちは。これは音声プリセットのサンプルです。';
 
+// モデルごとの価格（USD/分）
+const MODEL_PRICING = {
+  'gemini-2.5-flash-preview-tts': 0.10,
+  'gemini-2.0-flash-tts': 0.08,
+  'gemini-1.5-flash-tts': 0.05
+};
+
 // グローバル状態
 const appState = {
   apiKey: null,
@@ -26,6 +33,7 @@ const appState = {
     b: { name: '', voice: 'Puck', style: '' }
   },
   settings: {
+    selectedModel: 'gemini-2.5-flash-preview-tts',
     outputFormat: 'wav',
     temperature: 0.6,
     sectionSplit: 'auto'
@@ -144,6 +152,16 @@ function setupEventListeners() {
 
   // 原稿入力の文字数カウント
   elements.scriptTextarea.addEventListener('input', updateCharCount);
+
+  // モデル選択
+  const aiModelSelect = document.getElementById('ai-model');
+  if (aiModelSelect) {
+    aiModelSelect.addEventListener('change', (e) => {
+      appState.settings.selectedModel = e.target.value;
+      geminiClient.setModel(e.target.value);
+      console.log('モデル変更:', e.target.value);
+    });
+  }
 
   // 温度スライダー
   const temperatureInput = document.getElementById('temperature');
@@ -618,6 +636,47 @@ function applySampleScript() {
 }
 
 /**
+ * 音声の長さ（秒）を計算
+ */
+function getAudioDuration(audioBlob) {
+  return new Promise((resolve) => {
+    const audio = new Audio();
+    const url = URL.createObjectURL(audioBlob);
+
+    audio.addEventListener('loadedmetadata', () => {
+      URL.revokeObjectURL(url);
+      resolve(audio.duration);
+    });
+
+    audio.addEventListener('error', () => {
+      URL.revokeObjectURL(url);
+      resolve(0);
+    });
+
+    audio.src = url;
+  });
+}
+
+/**
+ * コストを計算（USD）
+ */
+function calculateCost(durationSeconds, modelName) {
+  const pricePerMinute = MODEL_PRICING[modelName] || 0.10;
+  const durationMinutes = durationSeconds / 60;
+  return pricePerMinute * durationMinutes;
+}
+
+/**
+ * コストを表示用にフォーマット
+ */
+function formatCost(costUsd) {
+  if (costUsd < 0.01) {
+    return `$${costUsd.toFixed(4)}`;
+  }
+  return `$${costUsd.toFixed(3)}`;
+}
+
+/**
  * 音声生成メイン処理
  * PBI-010: 音声生成メイン処理
  */
@@ -840,7 +899,8 @@ async function generateAudioFromScript(script, speakerConfig) {
     mimeType: mimeType,
     script: script,
     timestamp: new Date().toISOString(),
-    speakers: speakerConfig
+    speakers: speakerConfig,
+    modelName: appState.settings.selectedModel
   };
 }
 
@@ -848,10 +908,14 @@ async function generateAudioFromScript(script, speakerConfig) {
  * 生成された音声を表示
  * Phase 3で詳細実装
  */
-function displayGeneratedAudio(result) {
+async function displayGeneratedAudio(result) {
   console.log('音声プレビューを表示:', result);
 
-  const sectionRecord = createSectionRecord(result);
+  // 音声の長さを取得してコストを計算
+  const duration = await getAudioDuration(result.blob);
+  const cost = calculateCost(duration, result.modelName);
+
+  const sectionRecord = createSectionRecord(result, duration, cost);
   appState.generatedSections = [sectionRecord];
   appState.currentSectionIndex = 0;
 
@@ -861,7 +925,7 @@ function displayGeneratedAudio(result) {
   showGenerationCompleteMessage();
 }
 
-function createSectionRecord(result) {
+function createSectionRecord(result, duration = 0, cost = 0) {
   const timestamp = result.timestamp || new Date().toISOString();
   const safeTimestamp = timestamp.replace(/[:.]/g, '-').substring(0, 19);
 
@@ -873,7 +937,10 @@ function createSectionRecord(result) {
     speakers: result.speakers,
     mimeType: result.mimeType,
     blob: result.blob,
-    fileName: `narration_${safeTimestamp}.wav`
+    fileName: `narration_${safeTimestamp}.wav`,
+    modelName: result.modelName,
+    duration,
+    cost
   };
 }
 
@@ -888,6 +955,13 @@ function showSectionPreview(record, currentIndex, totalCount) {
   }
   if (elements.slideTotal) {
     elements.slideTotal.textContent = String(totalCount).padStart(2, '0');
+  }
+
+  // コスト表示
+  const sectionCost = document.getElementById('section-cost');
+  if (sectionCost && record.cost !== undefined) {
+    const durationText = record.duration ? `${record.duration.toFixed(1)}秒` : '--';
+    sectionCost.textContent = `コスト: ${formatCost(record.cost)} (${durationText})`;
   }
 
   const audioElement = document.getElementById('audio-element');
@@ -935,7 +1009,10 @@ function saveHistoryToStorage() {
       scriptSnippet: entry.scriptSnippet,
       mimeType: entry.mimeType,
       fileName: entry.fileName,
-      speakers: entry.speakers
+      speakers: entry.speakers,
+      modelName: entry.modelName,
+      duration: entry.duration,
+      cost: entry.cost
       // blob は除外
     }));
 
@@ -984,7 +1061,7 @@ function renderHistoryTable() {
   if (appState.history.length === 0) {
     const emptyRow = document.createElement('tr');
     const emptyCell = document.createElement('td');
-    emptyCell.colSpan = 6;
+    emptyCell.colSpan = 7;
     emptyCell.textContent = '生成履歴がありません';
     emptyCell.className = 'empty-history';
     emptyRow.appendChild(emptyCell);
@@ -1001,12 +1078,17 @@ function renderHistoryTable() {
       ? `<button class="btn btn-small" data-history-download="${entry.id}">⬇ Download</button>`
       : `<button class="btn btn-small" disabled title="過去のセッションで生成された音声はダウンロードできません">⬇ Download</button>`;
 
+    // 長さとコストの表示
+    const durationText = entry.duration ? `${entry.duration.toFixed(1)}秒` : '--';
+    const costText = entry.cost !== undefined ? formatCost(entry.cost) : '--';
+
     row.innerHTML = `
       <td>${String(index + 1).padStart(2, '0')}</td>
       <td>${new Date(entry.timestamp).toLocaleString()}</td>
       <td title="${entry.scriptSnippet || ''}">1 セクション</td>
       <td>${entry.mimeType?.toUpperCase() || 'audio/wav'}</td>
-      <td>--</td>
+      <td>${durationText}</td>
+      <td>${costText}</td>
       <td>${downloadButtonHtml}</td>
     `;
 

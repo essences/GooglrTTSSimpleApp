@@ -156,6 +156,13 @@
       <div class="card" data-testid="generation-settings">
         <h2>Generation Settings</h2>
 
+        <label for="ai-model">AI Model</label>
+        <select id="ai-model" data-testid="ai-model">
+          <option value="gemini-2.5-flash-preview-tts">Gemini 2.5 Flash TTS ($0.10/分)</option>
+          <option value="gemini-2.0-flash-tts">Gemini 2.0 Flash TTS ($0.08/分)</option>
+          <option value="gemini-1.5-flash-tts">Gemini 1.5 Flash TTS ($0.05/分)</option>
+        </select>
+
         <label for="output-format">Output format</label>
         <select id="output-format" data-testid="output-format">
           <option value="wav">WAV</option>
@@ -214,7 +221,10 @@
     <!-- セクションプレビュー -->
     <section class="card" data-testid="section-preview" style="display: none;">
       <h2>Section Preview</h2>
-      <p>Slide <span id="current-section">01</span> / <span id="total-sections">01</span></p>
+      <p>
+        Slide <span id="current-section">01</span> / <span id="total-sections">01</span>
+        <span id="section-cost" style="margin-left: 20px; color: #15803d; font-weight: 600;"></span>
+      </p>
 
       <div class="audio-player-container" data-testid="audio-player">
         <audio id="audio-element" controls></audio>
@@ -239,6 +249,7 @@
             <th>Sections</th>
             <th>Format</th>
             <th>Duration</th>
+            <th>Cost</th>
             <th>Actions</th>
           </tr>
         </thead>
