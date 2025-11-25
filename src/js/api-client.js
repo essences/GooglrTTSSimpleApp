@@ -1,33 +1,38 @@
 /**
- * Gemini TTS API クライアント
+ * Gemini TTS API クライアント (Google AI SDK版)
  * PBI-003: APIクライアント実装
  */
 
-(function attachGeminiClientToWindow(global) {
-  const DEFAULT_MODEL = 'gemini-2.5-flash-preview-tts';
-  const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-  /**
-   * Gemini API 呼び出し時のエラー
-   */
-  class GeminiApiError extends Error {
-    constructor(message, { status, details } = {}) {
-      super(message);
-      this.name = 'GeminiApiError';
-      this.status = status;
-      this.details = details;
+const DEFAULT_MODEL = 'gemini-2.5-flash-preview-tts';
+
+/**
+ * Gemini API 呼び出し時のエラー
+ */
+export class GeminiApiError extends Error {
+  constructor(message, { status, details } = {}) {
+    super(message);
+    this.name = 'GeminiApiError';
+    this.status = status;
+    this.details = details;
+  }
+}
+
+/**
+ * Gemini TTS API クライアント (SDK版)
+ */
+export class GeminiTtsClient {
+  constructor({ apiKey = null, model = DEFAULT_MODEL } = {}) {
+    this.apiKey = apiKey;
+    this.modelName = model;
+    this.genAI = null;
+    this.model = null;
+
+    if (apiKey) {
+      this.#initializeClient();
     }
   }
-
-  /**
-   * Gemini TTS API クライアント
-   */
-  class GeminiTtsClient {
-    constructor({ apiKey = null, model = DEFAULT_MODEL, baseUrl = DEFAULT_BASE_URL } = {}) {
-      this.apiKey = apiKey;
-      this.model = model;
-      this.baseUrl = baseUrl;
-    }
 
   /**
    * APIキーを設定
@@ -35,6 +40,12 @@
    */
   setApiKey(apiKey) {
     this.apiKey = apiKey;
+    if (apiKey) {
+      this.#initializeClient();
+    } else {
+      this.genAI = null;
+      this.model = null;
+    }
   }
 
   /**
@@ -42,7 +53,18 @@
    * @param {string} model
    */
   setModel(model) {
-    this.model = model;
+    this.modelName = model;
+    if (this.genAI) {
+      this.model = this.genAI.getGenerativeModel({ model: this.modelName });
+    }
+  }
+
+  /**
+   * クライアントを初期化
+   */
+  #initializeClient() {
+    this.genAI = new GoogleGenerativeAI(this.apiKey);
+    this.model = this.genAI.getGenerativeModel({ model: this.modelName });
   }
 
   /**
@@ -53,28 +75,37 @@
       throw new Error('text と voiceName は必須です。');
     }
 
-    const payload = {
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text }]
-        }
-      ],
-      config: {
-        response_modalities: ['AUDIO'],
-        speech_config: {
-          languageCode,
-          voiceConfig: {
-            prebuiltVoiceConfig: {
-              voiceName
-            }
-          }
-        }
-      },
-      generationConfig
-    };
+    if (!this.model) {
+      throw new Error('APIキーが設定されていません。');
+    }
 
-    return this.#sendGenerateRequest(payload);
+    console.log('SDK単一話者TTS呼び出し:', { text: text.substring(0, 50), voiceName, languageCode });
+
+    try {
+      const result = await this.model.generateContent({
+        contents: [{ role: 'user', parts: [{ text }] }],
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: voiceName
+              }
+            }
+          },
+          ...generationConfig
+        }
+      });
+
+      console.log('SDK API呼び出し成功');
+      return this.#processAudioResponse(result);
+    } catch (error) {
+      console.error('SDK API呼び出しエラー:', error);
+      throw new GeminiApiError(error.message || '音声生成に失敗しました', {
+        status: error.status || 0,
+        details: error
+      });
+    }
   }
 
   /**
@@ -83,8 +114,8 @@
   async generateMultiSpeaker({
     prompt,
     speakerConfigs,
-    languageCode = 'ja-JP',
-    generationConfig = {}
+    languageCode = null,
+    generationConfig = null
   }) {
     if (!prompt) {
       throw new Error('prompt は必須です。');
@@ -93,7 +124,11 @@
       throw new Error('speakerConfigs は1件以上必要です。');
     }
 
-    const normalizedSpeakerConfigs = speakerConfigs.map((cfg) => {
+    if (!this.model) {
+      throw new Error('APIキーが設定されていません。');
+    }
+
+    const speakerVoiceConfigs = speakerConfigs.map((cfg) => {
       if (!cfg?.speaker || !cfg?.voiceName) {
         throw new Error('speakerConfigs の各要素には speaker と voiceName が必要です。');
       }
@@ -107,124 +142,77 @@
       };
     });
 
-    const payload = {
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: prompt }]
-        }
-      ],
-      config: {
-        response_modalities: ['AUDIO'],
-        speech_config: {
-          languageCode,
-          multiSpeakerVoiceConfig: {
-            speakerVoiceConfigs: normalizedSpeakerConfigs
-          }
-        }
-      },
-      generationConfig
-    };
+    console.log('SDK複数話者TTS呼び出し:', {
+      prompt: prompt.substring(0, 100),
+      speakers: speakerConfigs.map(s => ({ speaker: s.speaker, voice: s.voiceName }))
+    });
 
-    return this.#sendGenerateRequest(payload);
+    try {
+      const result = await this.model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            multiSpeakerVoiceConfig: {
+              speakerVoiceConfigs: speakerVoiceConfigs
+            }
+          },
+          ...(generationConfig || {})
+        }
+      });
+
+      console.log('SDK API呼び出し成功');
+      return this.#processAudioResponse(result);
+    } catch (error) {
+      console.error('SDK API呼び出しエラー:', error);
+      throw new GeminiApiError(error.message || '音声生成に失敗しました', {
+        status: error.status || 0,
+        details: error
+      });
+    }
   }
 
   /**
-   * 共通の generateContent 呼び出し
+   * 音声レスポンスを処理
    */
-  async #sendGenerateRequest(payload) {
-    if (!this.apiKey) {
-      throw new Error('APIキーが設定されていません。');
-    }
+  #processAudioResponse(result) {
+    const response = result.response;
+    const candidates = response.candidates || [];
 
-    const url = `${this.baseUrl}/${this.model}:generateContent`;
-    const response = await fetch(`${url}?key=${encodeURIComponent(this.apiKey)}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      await this.#handleErrorResponse(response);
-    }
-
-    const data = await response.json();
-    const audioPart = this.#extractAudioPart(data);
-    const audioBlob = this.#decodeAudioPart(audioPart);
-
-    return {
-      blob: audioBlob,
-      mimeType: audioPart.inlineData?.mimeType || 'audio/wav',
-      usage: data.usageMetadata ?? null,
-      rawResponse: data
-    };
-  }
-
-  async #handleErrorResponse(response) {
-    let message = `Gemini API request failed (HTTP ${response.status})`;
-    let details = null;
-    try {
-      const errorBody = await response.json();
-      if (errorBody?.error?.message) {
-        message = errorBody.error.message;
-      }
-      details = errorBody;
-    } catch {
-      // ignore JSON parse failure
-    }
-
-    if (response.status === 401 || response.status === 403) {
-      throw new GeminiApiError('APIキーが無効か、アクセスが拒否されました。', {
-        status: response.status,
-        details
-      });
-    }
-
-    if (response.status === 429) {
-      throw new GeminiApiError('レート制限に達しました。しばらく待ってから再試行してください。', {
-        status: response.status,
-        details
-      });
-    }
-
-    throw new GeminiApiError(message, { status: response.status, details });
-  }
-
-  #extractAudioPart(responseJson) {
-    const candidates = responseJson?.candidates ?? [];
+    // 音声データを抽出
     for (const candidate of candidates) {
-      const parts = candidate?.content?.parts ?? [];
+      const parts = candidate?.content?.parts || [];
       for (const part of parts) {
         if (part.inlineData?.data) {
-          return part;
+          const mimeType = part.inlineData.mimeType || 'audio/wav';
+          const base64Data = part.inlineData.data;
+
+          // Base64からBlobに変換
+          const byteCharacters = atob(base64Data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i += 1) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const audioBlob = new Blob([byteArray], { type: mimeType });
+
+          return {
+            blob: audioBlob,
+            mimeType: mimeType,
+            usage: response.usageMetadata ?? null,
+            rawResponse: response
+          };
         }
       }
     }
+
     throw new GeminiApiError('音声データが取得できませんでした。レスポンスを確認してください。', {
       status: 200,
-      details: responseJson
+      details: response
     });
   }
+}
 
-  #decodeAudioPart(part) {
-    const mimeType = part.inlineData?.mimeType || 'audio/wav';
-    const base64Data = part.inlineData?.data;
-    if (!base64Data) {
-      throw new GeminiApiError('音声データが空です。');
-    }
-
-    const byteCharacters = atob(base64Data);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i += 1) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    return new Blob([byteArray], { type: mimeType });
-  }
-  }
-
-  global.GeminiApiError = GeminiApiError;
-  global.GeminiTtsClient = GeminiTtsClient;
-})(window);
+// グローバルに公開（後方互換性のため）
+window.GeminiApiError = GeminiApiError;
+window.GeminiTtsClient = GeminiTtsClient;

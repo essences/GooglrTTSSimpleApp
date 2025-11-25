@@ -3,6 +3,8 @@
  * PBI-001: プロジェクト初期セットアップ / PBI-002: APIキー管理
  */
 
+import { GeminiTtsClient, GeminiApiError } from './api-client.js';
+
 // 定数定義
 const STORAGE_KEY_API_KEY = 'gemini_api_key';
 const STORAGE_KEY_HISTORY = 'narration_history';
@@ -27,45 +29,51 @@ const appState = {
     temperature: 0.6,
     sectionSplit: 'auto'
   },
-  history: []
+  history: [],
+  generatedSections: [], // 生成された音声セクション
+  currentSectionIndex: 0
 };
 
 let pendingConfirmAction = null;
-const geminiClient = new window.GeminiTtsClient();
+const geminiClient = new GeminiTtsClient();
 
-// DOM要素
-const elements = {
-  apiKeyModal: document.getElementById('api-key-modal'),
-  mainApp: document.getElementById('main-app'),
-  apiKeyInput: document.getElementById('api-key-input'),
-  saveApiKeyButton: document.getElementById('save-api-key-button'),
-  scriptTextarea: document.getElementById('script-textarea'),
-  charCount: document.querySelector('[data-testid="char-count"]'),
-  generateButton: document.getElementById('generate-button'),
-  sampleScriptButton: document.querySelector('[data-testid="sample-script-button"]'),
-  settingsButton: document.querySelector('[data-testid="settings-button"]'),
-  settingsModal: document.getElementById('settings-modal'),
-  closeSettingsButton: document.querySelector('[data-testid="close-settings-button"]'),
-  testApiKeyButton: document.querySelector('[data-testid="test-api-key-button"]'),
-  testingIndicator: document.querySelector('[data-testid="testing-indicator"]'),
-  testResultMessage: document.querySelector('[data-testid="test-success-message"]'),
-  deleteApiKeyButton: document.querySelector('[data-testid="delete-api-key-button"]'),
-  confirmDialog: document.getElementById('confirm-dialog'),
-  confirmMessage: document.getElementById('confirm-message'),
-  cancelButton: document.querySelector('[data-testid="cancel-button"]'),
-  confirmPrimaryButton: document.querySelector('[data-testid="confirm-primary-button"]')
-};
-
-const confirmButtonDefaults = {
-  text: elements.confirmPrimaryButton?.textContent || 'OK',
-  variant: 'primary'
-};
+// DOM要素（initApp内で初期化）
+let elements = {};
+let confirmButtonDefaults = {};
 
 /**
  * アプリケーション初期化
  */
 function initApp() {
   console.log('アプリケーション起動中...');
+
+  // DOM要素を取得
+  elements = {
+    apiKeyModal: document.getElementById('api-key-modal'),
+    mainApp: document.getElementById('main-app'),
+    apiKeyInput: document.getElementById('api-key-input'),
+    saveApiKeyButton: document.getElementById('save-api-key-button'),
+    scriptTextarea: document.getElementById('script-textarea'),
+    charCount: document.querySelector('[data-testid="char-count"]'),
+    generateButton: document.getElementById('generate-button'),
+    sampleScriptButton: document.querySelector('[data-testid="sample-script-button"]'),
+    settingsButton: document.querySelector('[data-testid="settings-button"]'),
+    settingsModal: document.getElementById('settings-modal'),
+    closeSettingsButton: document.querySelector('[data-testid="close-settings-button"]'),
+    testApiKeyButton: document.querySelector('[data-testid="test-api-key-button"]'),
+    testingIndicator: document.querySelector('[data-testid="testing-indicator"]'),
+    testResultMessage: document.querySelector('[data-testid="test-success-message"]'),
+    deleteApiKeyButton: document.querySelector('[data-testid="delete-api-key-button"]'),
+    confirmDialog: document.getElementById('confirm-dialog'),
+    confirmMessage: document.getElementById('confirm-message'),
+    cancelButton: document.querySelector('[data-testid="cancel-button"]'),
+    confirmPrimaryButton: document.querySelector('[data-testid="confirm-primary-button"]')
+  };
+
+  confirmButtonDefaults = {
+    text: elements.confirmPrimaryButton?.textContent || 'OK',
+    variant: 'primary'
+  };
 
   // localStorageからAPIキーを読み込み
   const storedApiKey = localStorage.getItem(STORAGE_KEY_API_KEY);
@@ -188,6 +196,35 @@ function setupEventListeners() {
       }
       closeConfirmDialog();
     });
+  }
+
+  // 音声生成ボタン
+  if (elements.generateButton) {
+    elements.generateButton.addEventListener('click', handleGenerateAudio);
+  }
+
+  // 音声再生/一時停止ボタン
+  const playButton = document.querySelector('[data-testid="play-button"]');
+  const pauseButton = document.querySelector('[data-testid="pause-button"]');
+
+  if (playButton) {
+    playButton.addEventListener('click', handlePlayAudio);
+  }
+
+  if (pauseButton) {
+    pauseButton.addEventListener('click', handlePauseAudio);
+  }
+
+  // ダウンロードボタン
+  const downloadButton = document.querySelector('[data-testid="download-button"]');
+  if (downloadButton) {
+    downloadButton.addEventListener('click', handleDownloadAudio);
+  }
+
+  // 再生成ボタン
+  const regenerateButton = document.querySelector('[data-testid="regenerate-button"]');
+  if (regenerateButton) {
+    regenerateButton.addEventListener('click', handleRegenerateSection);
   }
 
   console.log('イベントリスナー設定完了');
@@ -481,6 +518,313 @@ function applySampleScript() {
   elements.scriptTextarea.value = SAMPLE_SCRIPT;
   updateCharCount();
   elements.scriptTextarea.focus();
+}
+
+/**
+ * 音声生成メイン処理
+ * PBI-010: 音声生成メイン処理
+ */
+async function handleGenerateAudio() {
+  console.log('音声生成を開始します...');
+
+  try {
+    // 入力検証
+    console.log('1. 入力検証を開始...');
+    const validationError = validateGenerationInputs();
+    if (validationError) {
+      console.log('検証エラー:', validationError);
+      alert(validationError);
+      return;
+    }
+    console.log('入力検証OK');
+
+    // スピーカー設定を取得
+    console.log('2. スピーカー設定を取得中...');
+    const speakerConfig = getSpeakerConfiguration();
+    console.log('スピーカー設定:', speakerConfig);
+
+    const script = appState.currentScript;
+    console.log('原稿:', script.substring(0, 50) + '...');
+
+    // UI状態を生成中に変更
+    console.log('3. UI状態を生成中に変更...');
+    setGeneratingState(true);
+    console.log('UI状態変更完了');
+
+    // 音声生成処理を実行
+    console.log('4. 音声生成処理を開始...');
+    const result = await generateAudioFromScript(script, speakerConfig);
+    console.log('音声生成処理完了');
+
+    // 生成結果を保存
+    appState.generatedSections.push(result);
+    appState.currentSectionIndex = 0;
+
+    // プレビュー表示
+    displayGeneratedAudio(result);
+
+    console.log('音声生成が完了しました');
+  } catch (error) {
+    console.error('音声生成エラー:', error);
+    console.error('エラーメッセージ:', error.message);
+    console.error('エラー詳細:', error.details);
+    console.error('エラースタック:', error.stack);
+    alert(`音声生成に失敗しました: ${error.message}`);
+  } finally {
+    setGeneratingState(false);
+  }
+}
+
+/**
+ * 入力値を検証
+ */
+function validateGenerationInputs() {
+  const script = elements.scriptTextarea.value.trim();
+
+  if (!script) {
+    return '原稿を入力してください。';
+  }
+
+  if (script.length < 5) {
+    return '原稿が短すぎます。もう少し長い文章を入力してください。';
+  }
+
+  const speakerAName = document.getElementById('speaker-a-name').value.trim();
+  const speakerBName = document.getElementById('speaker-b-name').value.trim();
+
+  // 原稿に話者名が含まれているかチェック
+  const hasMultipleSpeakers = script.includes(':');
+
+  if (hasMultipleSpeakers && !speakerAName && !speakerBName) {
+    return 'スピーカー設定で名前タグを入力してください。';
+  }
+
+  return null; // 検証OK
+}
+
+/**
+ * スピーカー設定を取得
+ */
+function getSpeakerConfiguration() {
+  const speakerAName = document.getElementById('speaker-a-name').value.trim();
+  const speakerAVoice = document.getElementById('speaker-a-voice').value;
+  const speakerAStyle = document.getElementById('speaker-a-style').value.trim();
+
+  const speakerBName = document.getElementById('speaker-b-name').value.trim();
+  const speakerBVoice = document.getElementById('speaker-b-voice').value;
+  const speakerBStyle = document.getElementById('speaker-b-style').value.trim();
+
+  // appStateを更新
+  appState.speakers.a = {
+    name: speakerAName,
+    voice: speakerAVoice,
+    style: speakerAStyle
+  };
+
+  appState.speakers.b = {
+    name: speakerBName,
+    voice: speakerBVoice,
+    style: speakerBStyle
+  };
+
+  return {
+    speakerA: appState.speakers.a,
+    speakerB: appState.speakers.b
+  };
+}
+
+/**
+ * 生成中状態の切り替え
+ */
+function setGeneratingState(isGenerating) {
+  // ボタンを無効化/有効化
+  elements.generateButton.disabled = isGenerating;
+  elements.generateButton.textContent = isGenerating ? '生成中...' : '音声を生成する';
+
+  // 進捗バーの表示/非表示
+  const progressBar = document.querySelector('[data-testid="progress-bar"]');
+  if (progressBar) {
+    progressBar.style.display = isGenerating ? 'block' : 'none';
+  }
+
+  // 原稿入力を無効化/有効化
+  elements.scriptTextarea.disabled = isGenerating;
+}
+
+/**
+ * 原稿から音声を生成
+ * Phase 2で詳細実装
+ */
+async function generateAudioFromScript(script, speakerConfig) {
+  console.log('音声生成API呼び出し:', { script, speakerConfig });
+
+  // 単一話者か複数話者か判定
+  const hasMultipleSpeakers = script.includes(':') &&
+    speakerConfig.speakerA.name &&
+    speakerConfig.speakerB.name;
+
+  let audioBlob;
+  let mimeType;
+
+  if (hasMultipleSpeakers) {
+    // 複数話者TTS
+    console.log('複数話者モードで生成');
+
+    // プロンプトに指示文を追加（Gemini APIの要件）
+    const instructionPrompt = `TTS the following conversation between ${speakerConfig.speakerA.name} and ${speakerConfig.speakerB.name}:\n${script}`;
+
+    const result = await geminiClient.generateMultiSpeaker({
+      prompt: instructionPrompt,
+      speakerConfigs: [
+        {
+          speaker: speakerConfig.speakerA.name,
+          voiceName: speakerConfig.speakerA.voice
+        },
+        {
+          speaker: speakerConfig.speakerB.name,
+          voiceName: speakerConfig.speakerB.voice
+        }
+      ]
+      // languageCodeとgenerationConfigは省略（REST API公式サンプルに合わせる）
+    });
+    audioBlob = result.blob;
+    mimeType = result.mimeType;
+  } else {
+    // 単一話者TTS
+    console.log('単一話者モードで生成');
+    const voiceName = speakerConfig.speakerA.voice || 'Kore';
+    const result = await geminiClient.generateSingleSpeaker({
+      text: script,
+      voiceName: voiceName,
+      generationConfig: {
+        temperature: appState.settings.temperature
+      }
+    });
+    audioBlob = result.blob;
+    mimeType = result.mimeType;
+  }
+
+  return {
+    blob: audioBlob,
+    mimeType: mimeType,
+    script: script,
+    timestamp: new Date().toISOString(),
+    speakers: speakerConfig
+  };
+}
+
+/**
+ * 生成された音声を表示
+ * Phase 3で詳細実装
+ */
+function displayGeneratedAudio(result) {
+  console.log('音声プレビューを表示:', result);
+
+  // セクションプレビューを表示
+  const sectionPreview = document.querySelector('[data-testid="section-preview"]');
+  if (sectionPreview) {
+    sectionPreview.style.display = 'block';
+  }
+
+  // 音声プレーヤーにBlobをセット
+  const audioElement = document.getElementById('audio-element');
+  if (audioElement) {
+    const audioUrl = URL.createObjectURL(result.blob);
+    audioElement.src = audioUrl;
+    audioElement.load();
+  }
+
+  // 生成完了メッセージを表示
+  const completeMessage = document.querySelector('[data-testid="generation-complete"]');
+  if (completeMessage) {
+    completeMessage.style.display = 'block';
+    setTimeout(() => {
+      completeMessage.style.display = 'none';
+    }, 3000);
+  }
+}
+
+/**
+ * 音声再生
+ * PBI-014: 音声再生機能
+ */
+function handlePlayAudio() {
+  const audioElement = document.getElementById('audio-element');
+  if (!audioElement || !audioElement.src) {
+    alert('再生する音声がありません。');
+    return;
+  }
+
+  audioElement.play();
+
+  // ボタン表示切り替え
+  const playButton = document.querySelector('[data-testid="play-button"]');
+  const pauseButton = document.querySelector('[data-testid="pause-button"]');
+
+  if (playButton) playButton.style.display = 'none';
+  if (pauseButton) pauseButton.style.display = 'inline-block';
+}
+
+/**
+ * 音声一時停止
+ */
+function handlePauseAudio() {
+  const audioElement = document.getElementById('audio-element');
+  if (audioElement) {
+    audioElement.pause();
+  }
+
+  // ボタン表示切り替え
+  const playButton = document.querySelector('[data-testid="play-button"]');
+  const pauseButton = document.querySelector('[data-testid="pause-button"]');
+
+  if (playButton) playButton.style.display = 'inline-block';
+  if (pauseButton) pauseButton.style.display = 'none';
+}
+
+/**
+ * 音声ダウンロード
+ * PBI-015: セクション単位ダウンロード
+ */
+function handleDownloadAudio() {
+  const currentSection = appState.generatedSections[appState.currentSectionIndex];
+
+  if (!currentSection || !currentSection.blob) {
+    alert('ダウンロードする音声がありません。');
+    return;
+  }
+
+  // ファイル名を生成（タイムスタンプベース）
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+  const filename = `narration_${timestamp}.wav`;
+
+  // Blobからダウンロード
+  const url = URL.createObjectURL(currentSection.blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  console.log('音声をダウンロードしました:', filename);
+}
+
+/**
+ * セクションの再生成
+ */
+async function handleRegenerateSection() {
+  if (!appState.currentScript) {
+    alert('原稿がありません。');
+    return;
+  }
+
+  const confirmed = confirm('現在のセクションを再生成しますか？');
+  if (!confirmed) return;
+
+  // 音声生成を再実行
+  await handleGenerateAudio();
 }
 
 /**
