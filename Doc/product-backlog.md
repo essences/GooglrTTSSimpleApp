@@ -78,6 +78,12 @@
 - `src/js/app.js` からクライアントをimportし、APIキー設定時にクライアントへ伝播
 - 次は generate ボタンフローからクライアントを呼び出し、実際の音声生成を連携する
 
+**進捗メモ (2025-11-25)**:
+- Google AI SDK（`@google/generative-ai`）に移行し、`src/index.html` に import map を追加してブラウザだけで SDK を読み込める構成に変更
+- SDK に合わせて `GeminiTtsClient` を全面改修（単一/複数話者 API の再実装、エラー整備）
+- SDK が返す `audio/L16` PCM をブラウザで再生できるよう `convertPcm16ToWav` を実装し、WAV Blob へ変換
+- `src/js/app.js` からの生成フローを SDK 版クライアントに接続し、生成〜再生 UI の差し替えを完了
+
 ---
 
 ### Epic 2: コア機能（Core Features）
