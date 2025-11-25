@@ -3,30 +3,31 @@
  * PBI-003: APIクライアント実装
  */
 
-const DEFAULT_MODEL = 'gemini-2.5-flash-preview-tts';
-const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+(function attachGeminiClientToWindow(global) {
+  const DEFAULT_MODEL = 'gemini-2.5-flash-preview-tts';
+  const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-/**
- * Gemini API 呼び出し時のエラー
- */
-export class GeminiApiError extends Error {
-  constructor(message, { status, details } = {}) {
-    super(message);
-    this.name = 'GeminiApiError';
-    this.status = status;
-    this.details = details;
+  /**
+   * Gemini API 呼び出し時のエラー
+   */
+  class GeminiApiError extends Error {
+    constructor(message, { status, details } = {}) {
+      super(message);
+      this.name = 'GeminiApiError';
+      this.status = status;
+      this.details = details;
+    }
   }
-}
 
-/**
- * Gemini TTS API クライアント
- */
-export class GeminiTtsClient {
-  constructor({ apiKey = null, model = DEFAULT_MODEL, baseUrl = DEFAULT_BASE_URL } = {}) {
-    this.apiKey = apiKey;
-    this.model = model;
-    this.baseUrl = baseUrl;
-  }
+  /**
+   * Gemini TTS API クライアント
+   */
+  class GeminiTtsClient {
+    constructor({ apiKey = null, model = DEFAULT_MODEL, baseUrl = DEFAULT_BASE_URL } = {}) {
+      this.apiKey = apiKey;
+      this.model = model;
+      this.baseUrl = baseUrl;
+    }
 
   /**
    * APIキーを設定
@@ -222,4 +223,8 @@ export class GeminiTtsClient {
     const byteArray = new Uint8Array(byteNumbers);
     return new Blob([byteArray], { type: mimeType });
   }
-}
+  }
+
+  global.GeminiApiError = GeminiApiError;
+  global.GeminiTtsClient = GeminiTtsClient;
+})(window);

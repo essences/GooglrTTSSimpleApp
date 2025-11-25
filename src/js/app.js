@@ -1,5 +1,3 @@
-import { GeminiTtsClient } from './api-client.js';
-
 /**
  * 研修ナレーションスタジオ - メインアプリケーション
  * PBI-001: プロジェクト初期セットアップ / PBI-002: APIキー管理
@@ -33,7 +31,7 @@ const appState = {
 };
 
 let pendingConfirmAction = null;
-const geminiClient = new GeminiTtsClient();
+const geminiClient = new window.GeminiTtsClient();
 
 // DOM要素
 const elements = {
