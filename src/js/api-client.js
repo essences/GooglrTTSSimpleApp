@@ -187,18 +187,29 @@ export class GeminiTtsClient {
           const mimeType = part.inlineData.mimeType || 'audio/wav';
           const base64Data = part.inlineData.data;
 
-          // Base64からBlobに変換
           const byteCharacters = atob(base64Data);
           const byteNumbers = new Array(byteCharacters.length);
           for (let i = 0; i < byteCharacters.length; i += 1) {
             byteNumbers[i] = byteCharacters.charCodeAt(i);
           }
           const byteArray = new Uint8Array(byteNumbers);
-          const audioBlob = new Blob([byteArray], { type: mimeType });
+
+          let audioBlob;
+          let normalizedMimeType = mimeType;
+
+          if (mimeType.toLowerCase().includes('audio/l16')) {
+            const sampleRateMatch = mimeType.match(/rate=(\d+)/i);
+            const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 24000;
+            const wavBuffer = convertPcm16ToWav(byteArray, sampleRate);
+            normalizedMimeType = 'audio/wav';
+            audioBlob = new Blob([wavBuffer], { type: normalizedMimeType });
+          } else {
+            audioBlob = new Blob([byteArray], { type: normalizedMimeType });
+          }
 
           return {
             blob: audioBlob,
-            mimeType: mimeType,
+            mimeType: normalizedMimeType,
             usage: response.usageMetadata ?? null,
             rawResponse: response
           };
@@ -216,3 +227,33 @@ export class GeminiTtsClient {
 // グローバルに公開（後方互換性のため）
 window.GeminiApiError = GeminiApiError;
 window.GeminiTtsClient = GeminiTtsClient;
+
+function convertPcm16ToWav(pcmBytes, sampleRate = 24000) {
+  const headerSize = 44;
+  const totalSize = headerSize + pcmBytes.length;
+  const buffer = new ArrayBuffer(totalSize);
+  const view = new DataView(buffer);
+
+  const writeString = (offset, str) => {
+    for (let i = 0; i < str.length; i += 1) {
+      view.setUint8(offset + i, str.charCodeAt(i));
+    }
+  };
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + pcmBytes.length, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, pcmBytes.length, true);
+
+  new Uint8Array(buffer, headerSize).set(pcmBytes);
+  return buffer;
+}
