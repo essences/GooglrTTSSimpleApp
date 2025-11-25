@@ -8,30 +8,48 @@ import { GeminiTtsClient, GeminiApiError } from './api-client.js';
 // 定数定義
 const STORAGE_KEY_API_KEY = 'gemini_api_key';
 const STORAGE_KEY_HISTORY = 'narration_history';
+const STORAGE_KEY_SPEAKERS = 'speaker_settings';
 const API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const API_VALIDATION_MODEL = 'gemini-2.5-flash-preview-tts';
 const API_VALIDATION_TIMEOUT_MS = 8000;
-const SAMPLE_SCRIPT = `Joe: Welcome to the onboarding deck. Today we'll cover the basics.
-Jane: Thanks Joe! I'm excited to learn about our platform.
-Joe: Let's start with the dashboard overview, then dive into workflows.
-Jane: Sounds good. I'll take notes for the team recap later.`;
+const USD_TO_JPY = 150;
+const TOKENS_PER_SECOND = 25;
+const SAMPLE_SCRIPT = `林: 研修にようこそ。[short pause] 本日はナレーションツールの基本操作を確認します。
+彩: [uhm] ありがとうございます。最初に確認すべきポイントは何でしょうか？
+林: 最初は原稿の入力とスピーカー設定です。[medium pause] そのあとに音声生成を実行します。
+彩: [sarcasm] わかりました。[short pause] 私も担当パートを追加しておきますね。
+[laughing] 林: では実践してみましょう。`;
 const VOICE_PREVIEW_TEXT = 'こんにちは。これは音声プリセットのサンプルです。';
 
-// モデルごとの価格（USD/分）
+// モデルごとの価格（USD / 100万トークン）
 const MODEL_PRICING = {
-  'gemini-2.5-flash-preview-tts': 0.10,
-  'gemini-2.0-flash-tts': 0.08,
-  'gemini-1.5-flash-tts': 0.05
+  'gemini-2.5-flash-preview-tts': {
+    label: 'Gemini 2.5 Flash TTS',
+    inputUsdPerMillion: 0.50,
+    outputUsdPerMillion: 10.0
+  },
+  'gemini-2.5-pro-tts': {
+    label: 'Gemini 2.5 Pro TTS',
+    inputUsdPerMillion: 1.0,
+    outputUsdPerMillion: 20.0
+  },
+  'gemini-1.5-flash-tts': {
+    label: 'Gemini 1.5 Flash TTS',
+    inputUsdPerMillion: 0.50,
+    outputUsdPerMillion: 12.0
+  }
+};
+
+const DEFAULT_SPEAKERS = {
+  a: { name: '林', voice: 'Kore', style: '落ち着いたトーン' },
+  b: { name: '彩', voice: 'Puck', style: '明るく親しみやすい' }
 };
 
 // グローバル状態
 const appState = {
   apiKey: null,
   currentScript: '',
-  speakers: {
-    a: { name: '', voice: 'Kore', style: '' },
-    b: { name: '', voice: 'Puck', style: '' }
-  },
+  speakers: JSON.parse(JSON.stringify(DEFAULT_SPEAKERS)),
   settings: {
     selectedModel: 'gemini-2.5-flash-preview-tts',
     outputFormat: 'wav',
@@ -87,6 +105,9 @@ function initApp() {
     variant: 'primary'
   };
 
+  // スピーカー設定を読み込み
+  loadSpeakerSettings();
+
   // localStorageからAPIキーを読み込み
   const storedApiKey = localStorage.getItem(STORAGE_KEY_API_KEY);
 
@@ -100,6 +121,8 @@ function initApp() {
     showApiKeyModal();
   }
 
+  applySpeakerSettingsToInputs();
+
   // 履歴を localStorage から読み込み（B5）
   loadHistoryFromStorage();
 
@@ -107,6 +130,7 @@ function initApp() {
   setupEventListeners();
 
   renderHistoryTable();
+  updateModelCostDisplay();
 
   console.log('アプリケーション起動完了');
 }
@@ -160,6 +184,7 @@ function setupEventListeners() {
       appState.settings.selectedModel = e.target.value;
       geminiClient.setModel(e.target.value);
       console.log('モデル変更:', e.target.value);
+      updateModelCostDisplay();
     });
   }
 
@@ -273,6 +298,8 @@ function setupEventListeners() {
   if (previewVoiceBButton) {
     previewVoiceBButton.addEventListener('click', () => handlePreviewVoice('b'));
   }
+
+  registerSpeakerInputListeners();
 
   console.log('イベントリスナー設定完了');
 }
@@ -657,23 +684,158 @@ function getAudioDuration(audioBlob) {
   });
 }
 
-/**
- * コストを計算（USD）
- */
-function calculateCost(durationSeconds, modelName) {
-  const pricePerMinute = MODEL_PRICING[modelName] || 0.10;
-  const durationMinutes = durationSeconds / 60;
-  return pricePerMinute * durationMinutes;
+function calculateCostDetails(usage, script, durationSeconds, modelName) {
+  const pricing = MODEL_PRICING[modelName];
+  if (!pricing) return null;
+
+  const inputTokens = extractInputTokens(usage, script);
+  const outputTokens = extractOutputTokens(usage, durationSeconds, script);
+
+  const usdInput = (inputTokens / 1_000_000) * pricing.inputUsdPerMillion;
+  const usdOutput = (outputTokens / 1_000_000) * pricing.outputUsdPerMillion;
+  const usdTotal = usdInput + usdOutput;
+
+  return {
+    usd: usdTotal,
+    jpy: usdTotal * USD_TO_JPY,
+    inputTokens,
+    outputTokens,
+    usdBreakdown: { input: usdInput, output: usdOutput }
+  };
 }
 
-/**
- * コストを表示用にフォーマット
- */
-function formatCost(costUsd) {
-  if (costUsd < 0.01) {
-    return `$${costUsd.toFixed(4)}`;
+function extractInputTokens(usage, script) {
+  if (!usage && script) return estimateInputTokensFromScript(script);
+  if (usage?.promptTokenCount) return usage.promptTokenCount;
+  if (usage?.inputTokenCount) return usage.inputTokenCount;
+  if (Array.isArray(usage?.promptTokensDetails)) {
+    return usage.promptTokensDetails.reduce((sum, item) => sum + (item.tokenCount || 0), 0);
   }
-  return `$${costUsd.toFixed(3)}`;
+  return estimateInputTokensFromScript(script);
+}
+
+function extractOutputTokens(usage, durationSeconds, script) {
+  if (usage?.candidatesTokenCount) return usage.candidatesTokenCount;
+  if (usage?.outputTokenCount) return usage.outputTokenCount;
+  if (Array.isArray(usage?.candidatesTokensDetails)) {
+    return usage.candidatesTokensDetails.reduce((sum, item) => sum + (item.tokenCount || 0), 0);
+  }
+
+  const effectiveDuration = durationSeconds && durationSeconds > 0
+    ? durationSeconds
+    : estimateDurationSecondsFromScript(script);
+
+  return Math.round(effectiveDuration * TOKENS_PER_SECOND);
+}
+
+function estimateInputTokensFromScript(script) {
+  if (!script) return 0;
+  return Math.max(1, Math.round(script.length * 1.2));
+}
+
+function estimateDurationSecondsFromScript(script) {
+  if (!script) return 5;
+  return Math.max(5, script.length / 6);
+}
+
+function formatUsd(value) {
+  if (value < 0.0001) {
+    return `$${value.toFixed(6)}`;
+  }
+  if (value < 0.01) {
+    return `$${value.toFixed(4)}`;
+  }
+  return `$${value.toFixed(3)}`;
+}
+
+function formatYenFromUsd(value) {
+  return Math.round(value * USD_TO_JPY).toLocaleString('ja-JP');
+}
+
+function formatCostDisplay(costInfo) {
+  if (!costInfo || !Number.isFinite(costInfo.usd)) {
+    return '--';
+  }
+  const yenText = `約${formatYenFromUsd(costInfo.usd)}円`;
+  return `${formatUsd(costInfo.usd)} (${yenText})`;
+}
+
+function formatTokenCount(value) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return '--';
+  }
+  return value.toLocaleString('ja-JP');
+}
+
+function formatSpeakerInfo(info) {
+  if (!info) return '--';
+  return `${info.name || '(未設定)'} / Voice: ${info.voice || '--'} / Style: ${info.style || '--'}`;
+}
+
+function parseSpeakerSegments(script) {
+  const lines = script.split(/\r?\n/);
+  const segments = [];
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    // 先頭に置かれる [laughing] などのマークアップタグを無視して話者名を抽出
+    const match = trimmed.match(/^(?:\[[^\]]+\]\s*)*([^\s:：]+)\s*[:：]\s*(.+)$/);
+    if (match) {
+      segments.push({
+        speaker: match[1],
+        text: match[2]
+      });
+    }
+  });
+
+  return segments;
+}
+
+function normalizeSpeakersRecord(rawSpeakers) {
+  const normalizeEntry = (entry) => {
+    if (!entry) return null;
+    return {
+      name: entry.name || '',
+      voice: entry.voice || entry.voicePreset || '',
+      style: entry.style || entry.styleMemo || ''
+    };
+  };
+
+  const speakerA = rawSpeakers?.a || rawSpeakers?.speakerA || null;
+  const speakerB = rawSpeakers?.b || rawSpeakers?.speakerB || null;
+
+  return {
+    a: normalizeEntry(speakerA),
+    b: normalizeEntry(speakerB)
+  };
+}
+
+function normalizeSpeakerLabel(label) {
+  if (!label) return '';
+  return label.trim().replace(/[\s\u3000]+/g, ' ').toLowerCase();
+}
+
+function assignSpeakerKeysToSegments(segments, speakerConfig) {
+  const normalizedA = normalizeSpeakerLabel(speakerConfig?.speakerA?.name);
+  const normalizedB = normalizeSpeakerLabel(speakerConfig?.speakerB?.name);
+
+  return segments.map((segment) => {
+    const normalizedSegmentName = normalizeSpeakerLabel(segment.speaker);
+    let speakerKey = null;
+
+    if (normalizedA && normalizedSegmentName === normalizedA) {
+      speakerKey = 'speaker_a';
+    } else if (normalizedB && normalizedSegmentName === normalizedB) {
+      speakerKey = 'speaker_b';
+    }
+
+    return {
+      ...segment,
+      speakerKey
+    };
+  });
 }
 
 /**
@@ -712,12 +874,8 @@ async function handleGenerateAudio() {
     const result = await generateAudioFromScript(script, speakerConfig);
     console.log('音声生成処理完了');
 
-    // 生成結果を保存
-    appState.generatedSections.push(result);
-    appState.currentSectionIndex = 0;
-
     // プレビュー表示
-    displayGeneratedAudio(result);
+    await displayGeneratedAudio(result);
 
     console.log('音声生成が完了しました');
   } catch (error) {
@@ -841,6 +999,98 @@ function setGeneratingState(isGenerating) {
   elements.scriptTextarea.disabled = isGenerating;
 }
 
+function loadSpeakerSettings() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_SPEAKERS);
+    if (!stored) {
+      appState.speakers = JSON.parse(JSON.stringify(DEFAULT_SPEAKERS));
+      return;
+    }
+    const parsed = JSON.parse(stored);
+    if (parsed?.a && parsed?.b) {
+      appState.speakers = {
+        a: {
+          name: parsed.a.name || DEFAULT_SPEAKERS.a.name,
+          voice: parsed.a.voice || DEFAULT_SPEAKERS.a.voice,
+          style: parsed.a.style || DEFAULT_SPEAKERS.a.style
+        },
+        b: {
+          name: parsed.b.name || DEFAULT_SPEAKERS.b.name,
+          voice: parsed.b.voice || DEFAULT_SPEAKERS.b.voice,
+          style: parsed.b.style || DEFAULT_SPEAKERS.b.style
+        }
+      };
+    }
+  } catch (error) {
+    console.warn('スピーカー設定の読み込みに失敗しました。デフォルトを使用します。', error);
+    appState.speakers = JSON.parse(JSON.stringify(DEFAULT_SPEAKERS));
+  }
+}
+
+function persistSpeakerSettings() {
+  try {
+    localStorage.setItem(STORAGE_KEY_SPEAKERS, JSON.stringify(appState.speakers));
+  } catch (error) {
+    console.warn('スピーカー設定の保存に失敗しました', error);
+  }
+}
+
+function applySpeakerSettingsToInputs() {
+  const aName = document.getElementById('speaker-a-name');
+  const aVoice = document.getElementById('speaker-a-voice');
+  const aStyle = document.getElementById('speaker-a-style');
+  const bName = document.getElementById('speaker-b-name');
+  const bVoice = document.getElementById('speaker-b-voice');
+  const bStyle = document.getElementById('speaker-b-style');
+
+  if (aName) aName.value = appState.speakers.a.name;
+  if (aVoice) aVoice.value = appState.speakers.a.voice;
+  if (aStyle) aStyle.value = appState.speakers.a.style;
+  if (bName) bName.value = appState.speakers.b.name;
+  if (bVoice) bVoice.value = appState.speakers.b.voice;
+  if (bStyle) bStyle.value = appState.speakers.b.style;
+}
+
+function registerSpeakerInputListeners() {
+  const mappings = [
+    { id: 'speaker-a-name', key: 'a', field: 'name', event: 'input' },
+    { id: 'speaker-a-voice', key: 'a', field: 'voice', event: 'change' },
+    { id: 'speaker-a-style', key: 'a', field: 'style', event: 'input' },
+    { id: 'speaker-b-name', key: 'b', field: 'name', event: 'input' },
+    { id: 'speaker-b-voice', key: 'b', field: 'voice', event: 'change' },
+    { id: 'speaker-b-style', key: 'b', field: 'style', event: 'input' }
+  ];
+
+  mappings.forEach(({ id, key, field, event }) => {
+    const element = document.getElementById(id);
+    if (!element) return;
+
+    element.addEventListener(event, () => {
+      const value = field === 'voice' ? element.value : element.value.trim();
+      appState.speakers[key][field] = value;
+      persistSpeakerSettings();
+    });
+  });
+}
+
+function updateModelCostDisplay() {
+  const display = document.getElementById('model-cost-display');
+  if (!display) return;
+
+  const pricing = MODEL_PRICING[appState.settings.selectedModel];
+  if (!pricing) {
+    display.textContent = '料金情報がありません';
+    return;
+  }
+
+  const inputUsd = pricing.inputUsdPerMillion;
+  const outputUsd = pricing.outputUsdPerMillion;
+  const inputJpy = Math.round(inputUsd * USD_TO_JPY).toLocaleString('ja-JP');
+  const outputJpy = Math.round(outputUsd * USD_TO_JPY).toLocaleString('ja-JP');
+
+  display.textContent = `入力: $${inputUsd.toFixed(2)} (約${inputJpy}円) /100万テキストトークン、出力: $${outputUsd.toFixed(2)} (約${outputJpy}円) /100万音声トークン`;
+}
+
 /**
  * 原稿から音声を生成
  * Phase 2で詳細実装
@@ -849,29 +1099,48 @@ async function generateAudioFromScript(script, speakerConfig) {
   console.log('音声生成API呼び出し:', { script, speakerConfig });
 
   // 単一話者か複数話者か判定
-  const hasMultipleSpeakers = script.includes(':') &&
-    speakerConfig.speakerA.name &&
-    speakerConfig.speakerB.name;
+  const segments = parseSpeakerSegments(script);
+  const keyedSegments = assignSpeakerKeysToSegments(segments, speakerConfig);
+  const speakerANameRaw = speakerConfig.speakerA?.name?.trim();
+  const speakerBNameRaw = speakerConfig.speakerB?.name?.trim();
+  const hasSpeakerA = keyedSegments.some(seg => seg.speakerKey === 'speaker_a');
+  const hasSpeakerB = keyedSegments.some(seg => seg.speakerKey === 'speaker_b');
+  const hasMultipleSpeakers = Boolean(
+    hasSpeakerA &&
+    hasSpeakerB &&
+    speakerANameRaw &&
+    speakerBNameRaw
+  );
 
   let audioBlob;
   let mimeType;
+  let usageMetadata;
 
   if (hasMultipleSpeakers) {
     // 複数話者TTS
     console.log('複数話者モードで生成');
 
-    // プロンプトに指示文を追加（Gemini APIの要件）
-    const instructionPrompt = `TTS the following conversation between ${speakerConfig.speakerA.name} and ${speakerConfig.speakerB.name}:\n${script}`;
+    const speakerAName = speakerANameRaw || 'Speaker A';
+    const speakerBName = speakerBNameRaw || 'Speaker B';
+
+    const multiSpeakerScript = keyedSegments
+      .map((seg) => {
+        const isSpeakerB = seg.speakerKey === 'speaker_b';
+        const placeholder = isSpeakerB ? 'speaker_b' : 'speaker_a';
+        const spokenName = isSpeakerB ? speakerBName : speakerAName;
+        return `<speaker name="${placeholder}">${spokenName}: ${seg.text}</speaker>`;
+      })
+      .join('\n');
 
     const result = await geminiClient.generateMultiSpeaker({
-      prompt: instructionPrompt,
+      prompt: multiSpeakerScript,
       speakerConfigs: [
         {
-          speaker: speakerConfig.speakerA.name,
+          speaker: 'speaker_a',
           voiceName: speakerConfig.speakerA.voice
         },
         {
-          speaker: speakerConfig.speakerB.name,
+          speaker: 'speaker_b',
           voiceName: speakerConfig.speakerB.voice
         }
       ]
@@ -879,6 +1148,7 @@ async function generateAudioFromScript(script, speakerConfig) {
     });
     audioBlob = result.blob;
     mimeType = result.mimeType;
+    usageMetadata = result.usage;
   } else {
     // 単一話者TTS
     console.log('単一話者モードで生成');
@@ -892,6 +1162,7 @@ async function generateAudioFromScript(script, speakerConfig) {
     });
     audioBlob = result.blob;
     mimeType = result.mimeType;
+    usageMetadata = result.usage;
   }
 
   return {
@@ -899,8 +1170,9 @@ async function generateAudioFromScript(script, speakerConfig) {
     mimeType: mimeType,
     script: script,
     timestamp: new Date().toISOString(),
-    speakers: speakerConfig,
-    modelName: appState.settings.selectedModel
+    speakers: normalizeSpeakersRecord(speakerConfig),
+    modelName: appState.settings.selectedModel,
+    usage: usageMetadata
   };
 }
 
@@ -913,9 +1185,9 @@ async function displayGeneratedAudio(result) {
 
   // 音声の長さを取得してコストを計算
   const duration = await getAudioDuration(result.blob);
-  const cost = calculateCost(duration, result.modelName);
+  const costInfo = calculateCostDetails(result.usage, result.script, duration, result.modelName);
 
-  const sectionRecord = createSectionRecord(result, duration, cost);
+  const sectionRecord = createSectionRecord(result, duration, costInfo);
   appState.generatedSections = [sectionRecord];
   appState.currentSectionIndex = 0;
 
@@ -925,7 +1197,7 @@ async function displayGeneratedAudio(result) {
   showGenerationCompleteMessage();
 }
 
-function createSectionRecord(result, duration = 0, cost = 0) {
+function createSectionRecord(result, duration = 0, costInfo = null) {
   const timestamp = result.timestamp || new Date().toISOString();
   const safeTimestamp = timestamp.replace(/[:.]/g, '-').substring(0, 19);
 
@@ -934,13 +1206,13 @@ function createSectionRecord(result, duration = 0, cost = 0) {
     script: result.script,
     scriptSnippet: result.script?.substring(0, 80) ?? '',
     timestamp,
-    speakers: result.speakers,
+    speakers: normalizeSpeakersRecord(result.speakers),
     mimeType: result.mimeType,
     blob: result.blob,
     fileName: `narration_${safeTimestamp}.wav`,
     modelName: result.modelName,
     duration,
-    cost
+    cost: costInfo
   };
 }
 
@@ -959,9 +1231,19 @@ function showSectionPreview(record, currentIndex, totalCount) {
 
   // コスト表示
   const sectionCost = document.getElementById('section-cost');
-  if (sectionCost && record.cost !== undefined) {
-    const durationText = record.duration ? `${record.duration.toFixed(1)}秒` : '--';
-    sectionCost.textContent = `コスト: ${formatCost(record.cost)} (${durationText})`;
+  if (sectionCost) {
+    if (record.cost) {
+      const durationText = record.duration ? `${record.duration.toFixed(1)}秒` : '--';
+      sectionCost.textContent = `コスト: ${formatCostDisplay(record.cost)} / ${durationText}`;
+      if (record.cost.inputTokens !== undefined && record.cost.outputTokens !== undefined) {
+        sectionCost.title = `入力トークン: ${record.cost.inputTokens.toLocaleString()} / 出力トークン: ${record.cost.outputTokens.toLocaleString()}`;
+      } else {
+        sectionCost.title = '';
+      }
+    } else {
+      sectionCost.textContent = '';
+      sectionCost.title = '';
+    }
   }
 
   const audioElement = document.getElementById('audio-element');
@@ -1005,11 +1287,12 @@ function saveHistoryToStorage() {
     // Blob は保存できないため、メタデータのみを保存
     const historyMetadata = appState.history.map((entry) => ({
       id: entry.id,
+      script: entry.script,
       timestamp: entry.timestamp,
       scriptSnippet: entry.scriptSnippet,
       mimeType: entry.mimeType,
       fileName: entry.fileName,
-      speakers: entry.speakers,
+      speakers: normalizeSpeakersRecord(entry.speakers),
       modelName: entry.modelName,
       duration: entry.duration,
       cost: entry.cost
@@ -1042,10 +1325,18 @@ function loadHistoryFromStorage() {
     }
 
     // メタデータのみの履歴（Blob なし）を復元
-    appState.history = historyMetadata.map((meta) => ({
-      ...meta,
-      blob: null // Blob は復元不可
-    }));
+    appState.history = historyMetadata.map((meta) => {
+      const normalizedCost = typeof meta.cost === 'number'
+        ? { usd: meta.cost, jpy: meta.cost * USD_TO_JPY }
+        : meta.cost || null;
+
+      return {
+        ...meta,
+        blob: null,
+        cost: normalizedCost,
+        speakers: normalizeSpeakersRecord(meta.speakers)
+      };
+    });
 
     console.log(`${appState.history.length} 件の履歴を読み込みました`);
   } catch (error) {
@@ -1074,13 +1365,22 @@ function renderHistoryTable() {
 
     // Blob がない場合はダウンロードボタンを無効化
     const hasBlob = entry.blob !== null && entry.blob !== undefined;
-    const downloadButtonHtml = hasBlob
-      ? `<button class="btn btn-small" data-history-download="${entry.id}">⬇ Download</button>`
-      : `<button class="btn btn-small" disabled title="過去のセッションで生成された音声はダウンロードできません">⬇ Download</button>`;
+    const playButtonHtml = hasBlob
+      ? `<button class="btn btn-small" data-history-play="${entry.id}">▶ Play</button>`
+      : `<button class="btn btn-small" disabled title="このセッションでは音声データがありません">▶ Play</button>`;
+    const downloadAudioButton = hasBlob
+      ? `<button class="btn btn-small" data-history-audio="${entry.id}">⬇ Audio</button>`
+      : `<button class="btn btn-small" disabled title="このセッションでは音声データがありません">⬇ Audio</button>`;
+    const downloadInfoButton = `<button class="btn btn-small" data-history-download="${entry.id}">⬇ Info</button>`;
 
     // 長さとコストの表示
     const durationText = entry.duration ? `${entry.duration.toFixed(1)}秒` : '--';
-    const costText = entry.cost !== undefined ? formatCost(entry.cost) : '--';
+    const costInfo = typeof entry.cost === 'number'
+      ? { usd: entry.cost, jpy: entry.cost * USD_TO_JPY }
+      : entry.cost;
+    const costText = costInfo
+      ? `<span title="入力:${formatTokenCount(costInfo.inputTokens)} / 出力:${formatTokenCount(costInfo.outputTokens)}">${formatCostDisplay(costInfo)}</span>`
+      : '--';
 
     row.innerHTML = `
       <td>${String(index + 1).padStart(2, '0')}</td>
@@ -1089,7 +1389,7 @@ function renderHistoryTable() {
       <td>${entry.mimeType?.toUpperCase() || 'audio/wav'}</td>
       <td>${durationText}</td>
       <td>${costText}</td>
-      <td>${downloadButtonHtml}</td>
+      <td>${playButtonHtml} ${downloadAudioButton} ${downloadInfoButton}</td>
     `;
 
     elements.historyTableBody.appendChild(row);
@@ -1110,7 +1410,22 @@ function triggerBlobDownload(blob, fileName) {
 function handleHistoryDownload(entryId) {
   const record = appState.history.find((item) => item.id === entryId);
   if (!record) return;
-  triggerBlobDownload(record.blob, record.fileName);
+
+  const lines = [];
+  lines.push(`Timestamp: ${new Date(record.timestamp).toLocaleString()}`);
+  lines.push(`Model: ${record.modelName || '--'}`);
+  lines.push('');
+  lines.push('Speaker Settings:');
+  lines.push(`  Speaker A: ${formatSpeakerInfo(record.speakers?.a)}`);
+  lines.push(`  Speaker B: ${formatSpeakerInfo(record.speakers?.b)}`);
+  lines.push('');
+  lines.push('Script:');
+  lines.push(record.script || '(No script stored)');
+
+  const textContent = lines.join('\n');
+  const blob = new Blob([textContent], {type: 'text/plain'});
+  const filename = `narration_${record.id}_info.txt`;
+  triggerBlobDownload(blob, filename);
 }
 
 function handleGlobalClicks(event) {
@@ -1119,6 +1434,42 @@ function handleGlobalClicks(event) {
     const entryId = downloadButton.dataset.historyDownload;
     handleHistoryDownload(entryId);
   }
+
+  const playButton = event.target.closest('[data-history-play]');
+  if (playButton) {
+    const entryId = playButton.dataset.historyPlay;
+    handleHistoryPlay(entryId);
+  }
+
+  const audioButton = event.target.closest('[data-history-audio]');
+  if (audioButton) {
+    const entryId = audioButton.dataset.historyAudio;
+    handleHistoryAudioDownload(entryId);
+  }
+}
+
+function handleHistoryPlay(entryId) {
+  const record = appState.history.find((item) => item.id === entryId);
+  if (!record) return;
+  if (!record.blob) {
+    alert('この履歴の音声データは現在のセッションでは再生できません。');
+    return;
+  }
+
+  appState.generatedSections = [record];
+  appState.currentSectionIndex = 0;
+  showSectionPreview(record, 1, 1);
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function handleHistoryAudioDownload(entryId) {
+  const record = appState.history.find((item) => item.id === entryId);
+  if (!record || !record.blob) {
+    alert('この履歴の音声データは現在のセッションではダウンロードできません。');
+    return;
+  }
+
+  triggerBlobDownload(record.blob, record.fileName);
 }
 
 /**

@@ -176,6 +176,12 @@ label {
   font-weight: 500;
 }
 
+.model-cost-note {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 4px 0 12px;
+}
+
 .form-group {
   margin-bottom: 16px;
 }
