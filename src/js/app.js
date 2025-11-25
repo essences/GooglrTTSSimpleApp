@@ -15,6 +15,7 @@ const SAMPLE_SCRIPT = `Joe: Welcome to the onboarding deck. Today we'll cover th
 Jane: Thanks Joe! I'm excited to learn about our platform.
 Joe: Let's start with the dashboard overview, then dive into workflows.
 Jane: Sounds good. I'll take notes for the team recap later.`;
+const VOICE_PREVIEW_TEXT = 'こんにちは。これは音声プリセットのサンプルです。';
 
 // グローバル状態
 const appState = {
@@ -67,7 +68,10 @@ function initApp() {
     confirmDialog: document.getElementById('confirm-dialog'),
     confirmMessage: document.getElementById('confirm-message'),
     cancelButton: document.querySelector('[data-testid="cancel-button"]'),
-    confirmPrimaryButton: document.querySelector('[data-testid="confirm-primary-button"]')
+    confirmPrimaryButton: document.querySelector('[data-testid="confirm-primary-button"]'),
+    historyTableBody: document.getElementById('history-tbody'),
+    slideCurrent: document.getElementById('current-section'),
+    slideTotal: document.getElementById('total-sections')
   };
 
   confirmButtonDefaults = {
@@ -88,8 +92,13 @@ function initApp() {
     showApiKeyModal();
   }
 
+  // 履歴を localStorage から読み込み（B5）
+  loadHistoryFromStorage();
+
   // イベントリスナーを設定
   setupEventListeners();
+
+  renderHistoryTable();
 
   console.log('アプリケーション起動完了');
 }
@@ -174,6 +183,12 @@ function setupEventListeners() {
     elements.sampleScriptButton.addEventListener('click', handleSampleScriptRequest);
   }
 
+  // TXT ファイルインポート（B1）
+  const importTxtButton = document.querySelector('[data-testid="import-txt-button"]');
+  if (importTxtButton) {
+    importTxtButton.addEventListener('click', handleImportTxt);
+  }
+
   // APIキーのテスト
   if (elements.testApiKeyButton) {
     elements.testApiKeyButton.addEventListener('click', handleTestApiKey);
@@ -197,6 +212,8 @@ function setupEventListeners() {
       closeConfirmDialog();
     });
   }
+
+  document.addEventListener('click', handleGlobalClicks);
 
   // 音声生成ボタン
   if (elements.generateButton) {
@@ -225,6 +242,18 @@ function setupEventListeners() {
   const regenerateButton = document.querySelector('[data-testid="regenerate-button"]');
   if (regenerateButton) {
     regenerateButton.addEventListener('click', handleRegenerateSection);
+  }
+
+  // 音声プリセット試聴ボタン（B2）
+  const previewVoiceAButton = document.querySelector('[data-testid="preview-voice-a"]');
+  const previewVoiceBButton = document.querySelector('[data-testid="preview-voice-b"]');
+
+  if (previewVoiceAButton) {
+    previewVoiceAButton.addEventListener('click', () => handlePreviewVoice('a'));
+  }
+
+  if (previewVoiceBButton) {
+    previewVoiceBButton.addEventListener('click', () => handlePreviewVoice('b'));
   }
 
   console.log('イベントリスナー設定完了');
@@ -499,6 +528,74 @@ function configureConfirmButton({ confirmText, variant } = {}) {
 }
 
 /**
+ * TXT ファイルインポート
+ * B1: TXT ファイルインポート機能
+ */
+function handleImportTxt() {
+  // ファイル選択ダイアログを開く
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.txt,text/plain';
+
+  fileInput.addEventListener('change', (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // ファイルサイズチェック（5MB まで）
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSize) {
+      alert('ファイルサイズが大きすぎます。5MB以下のファイルを選択してください。');
+      return;
+    }
+
+    // ファイルタイプチェック
+    if (!file.type.includes('text') && !file.name.endsWith('.txt')) {
+      alert('テキストファイル (.txt) を選択してください。');
+      return;
+    }
+
+    // FileReader でファイル読み込み
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      const text = e.target?.result;
+      if (typeof text !== 'string') {
+        alert('ファイルの読み込みに失敗しました。');
+        return;
+      }
+
+      // 既存のテキストがある場合は確認ダイアログ
+      const existing = elements.scriptTextarea.value.trim();
+      if (existing.length > 0) {
+        openConfirmDialog(
+          `現在の原稿を "${file.name}" の内容で置き換えます。よろしいですか？`,
+          () => applyImportedText(text),
+          { confirmText: '読み込む', variant: 'primary' }
+        );
+      } else {
+        applyImportedText(text);
+      }
+    };
+
+    reader.onerror = () => {
+      alert('ファイルの読み込み中にエラーが発生しました。');
+    };
+
+    reader.readAsText(file, 'UTF-8');
+  });
+
+  // ファイル選択ダイアログを開く
+  fileInput.click();
+}
+
+function applyImportedText(text) {
+  elements.scriptTextarea.value = text;
+  updateCharCount();
+  elements.scriptTextarea.focus();
+  console.log('TXT ファイルを読み込みました');
+}
+
+/**
  * サンプルスクリプト読み込み
  */
 function handleSampleScriptRequest() {
@@ -577,10 +674,12 @@ async function handleGenerateAudio() {
 
 /**
  * 入力値を検証
+ * B3: スピーカー設定バリデーション強化
  */
 function validateGenerationInputs() {
   const script = elements.scriptTextarea.value.trim();
 
+  // 原稿検証
   if (!script) {
     return '原稿を入力してください。';
   }
@@ -595,8 +694,40 @@ function validateGenerationInputs() {
   // 原稿に話者名が含まれているかチェック
   const hasMultipleSpeakers = script.includes(':');
 
-  if (hasMultipleSpeakers && !speakerAName && !speakerBName) {
-    return 'スピーカー設定で名前タグを入力してください。';
+  // 複数話者形式の検証
+  if (hasMultipleSpeakers) {
+    // 両方の名前が必要
+    if (!speakerAName || !speakerBName) {
+      return '複数話者の原稿には、Speaker A と Speaker B の両方の名前タグが必要です。';
+    }
+
+    // 名前の重複チェック
+    if (speakerAName.toLowerCase() === speakerBName.toLowerCase()) {
+      return 'Speaker A と Speaker B の名前タグは異なる名前にしてください。';
+    }
+
+    // 名前が原稿に含まれているかチェック
+    const scriptLower = script.toLowerCase();
+    const speakerAInScript = scriptLower.includes(speakerAName.toLowerCase() + ':');
+    const speakerBInScript = scriptLower.includes(speakerBName.toLowerCase() + ':');
+
+    if (!speakerAInScript && !speakerBInScript) {
+      return `原稿に "${speakerAName}" または "${speakerBName}" が見つかりません。名前タグを確認してください。`;
+    }
+
+    // 名前フォーマット検証（英数字と基本的な文字のみ）
+    const namePattern = /^[a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF_-]+$/;
+
+    if (!namePattern.test(speakerAName)) {
+      return `Speaker A の名前タグ "${speakerAName}" に使用できない文字が含まれています。`;
+    }
+
+    if (!namePattern.test(speakerBName)) {
+      return `Speaker B の名前タグ "${speakerBName}" に使用できない文字が含まれています。`;
+    }
+  } else {
+    // 単一話者の場合、Speaker A の設定があればOK（名前は任意）
+    // 特に検証不要
   }
 
   return null; // 検証OK
@@ -720,27 +851,191 @@ async function generateAudioFromScript(script, speakerConfig) {
 function displayGeneratedAudio(result) {
   console.log('音声プレビューを表示:', result);
 
-  // セクションプレビューを表示
+  const sectionRecord = createSectionRecord(result);
+  appState.generatedSections = [sectionRecord];
+  appState.currentSectionIndex = 0;
+
+  showSectionPreview(sectionRecord, 1, 1);
+  addHistoryEntry(sectionRecord);
+  renderHistoryTable();
+  showGenerationCompleteMessage();
+}
+
+function createSectionRecord(result) {
+  const timestamp = result.timestamp || new Date().toISOString();
+  const safeTimestamp = timestamp.replace(/[:.]/g, '-').substring(0, 19);
+
+  return {
+    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `section_${Date.now()}`,
+    script: result.script,
+    scriptSnippet: result.script?.substring(0, 80) ?? '',
+    timestamp,
+    speakers: result.speakers,
+    mimeType: result.mimeType,
+    blob: result.blob,
+    fileName: `narration_${safeTimestamp}.wav`
+  };
+}
+
+function showSectionPreview(record, currentIndex, totalCount) {
   const sectionPreview = document.querySelector('[data-testid="section-preview"]');
   if (sectionPreview) {
     sectionPreview.style.display = 'block';
   }
 
-  // 音声プレーヤーにBlobをセット
-  const audioElement = document.getElementById('audio-element');
-  if (audioElement) {
-    const audioUrl = URL.createObjectURL(result.blob);
-    audioElement.src = audioUrl;
-    audioElement.load();
+  if (elements.slideCurrent) {
+    elements.slideCurrent.textContent = String(currentIndex).padStart(2, '0');
+  }
+  if (elements.slideTotal) {
+    elements.slideTotal.textContent = String(totalCount).padStart(2, '0');
   }
 
-  // 生成完了メッセージを表示
+  const audioElement = document.getElementById('audio-element');
+  if (audioElement) {
+    if (audioElement.dataset.previewUrl) {
+      URL.revokeObjectURL(audioElement.dataset.previewUrl);
+    }
+
+    const previewUrl = URL.createObjectURL(record.blob);
+    audioElement.dataset.previewUrl = previewUrl;
+    audioElement.src = previewUrl;
+    audioElement.load();
+  }
+}
+
+function showGenerationCompleteMessage() {
   const completeMessage = document.querySelector('[data-testid="generation-complete"]');
-  if (completeMessage) {
-    completeMessage.style.display = 'block';
-    setTimeout(() => {
-      completeMessage.style.display = 'none';
-    }, 3000);
+  if (!completeMessage) return;
+
+  completeMessage.style.display = 'block';
+  setTimeout(() => {
+    completeMessage.style.display = 'none';
+  }, 3000);
+}
+
+function addHistoryEntry(record) {
+  appState.history.unshift({
+    ...record
+  });
+
+  // localStorage に保存（B5）
+  saveHistoryToStorage();
+}
+
+/**
+ * 履歴を localStorage に保存
+ * B5: 履歴の localStorage 永続化
+ */
+function saveHistoryToStorage() {
+  try {
+    // Blob は保存できないため、メタデータのみを保存
+    const historyMetadata = appState.history.map((entry) => ({
+      id: entry.id,
+      timestamp: entry.timestamp,
+      scriptSnippet: entry.scriptSnippet,
+      mimeType: entry.mimeType,
+      fileName: entry.fileName,
+      speakers: entry.speakers
+      // blob は除外
+    }));
+
+    localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(historyMetadata));
+    console.log('履歴を localStorage に保存しました');
+  } catch (error) {
+    console.error('履歴の保存に失敗しました:', error);
+  }
+}
+
+/**
+ * 履歴を localStorage から読み込み
+ * B5: 履歴の localStorage 永続化
+ */
+function loadHistoryFromStorage() {
+  try {
+    const storedHistory = localStorage.getItem(STORAGE_KEY_HISTORY);
+    if (!storedHistory) {
+      console.log('保存された履歴はありません');
+      return;
+    }
+
+    const historyMetadata = JSON.parse(storedHistory);
+    if (!Array.isArray(historyMetadata)) {
+      console.warn('履歴データの形式が不正です');
+      return;
+    }
+
+    // メタデータのみの履歴（Blob なし）を復元
+    appState.history = historyMetadata.map((meta) => ({
+      ...meta,
+      blob: null // Blob は復元不可
+    }));
+
+    console.log(`${appState.history.length} 件の履歴を読み込みました`);
+  } catch (error) {
+    console.error('履歴の読み込みに失敗しました:', error);
+    appState.history = [];
+  }
+}
+
+function renderHistoryTable() {
+  if (!elements.historyTableBody) return;
+
+  elements.historyTableBody.innerHTML = '';
+  if (appState.history.length === 0) {
+    const emptyRow = document.createElement('tr');
+    const emptyCell = document.createElement('td');
+    emptyCell.colSpan = 6;
+    emptyCell.textContent = '生成履歴がありません';
+    emptyCell.className = 'empty-history';
+    emptyRow.appendChild(emptyCell);
+    elements.historyTableBody.appendChild(emptyRow);
+    return;
+  }
+
+  appState.history.forEach((entry, index) => {
+    const row = document.createElement('tr');
+
+    // Blob がない場合はダウンロードボタンを無効化
+    const hasBlob = entry.blob !== null && entry.blob !== undefined;
+    const downloadButtonHtml = hasBlob
+      ? `<button class="btn btn-small" data-history-download="${entry.id}">⬇ Download</button>`
+      : `<button class="btn btn-small" disabled title="過去のセッションで生成された音声はダウンロードできません">⬇ Download</button>`;
+
+    row.innerHTML = `
+      <td>${String(index + 1).padStart(2, '0')}</td>
+      <td>${new Date(entry.timestamp).toLocaleString()}</td>
+      <td title="${entry.scriptSnippet || ''}">1 セクション</td>
+      <td>${entry.mimeType?.toUpperCase() || 'audio/wav'}</td>
+      <td>--</td>
+      <td>${downloadButtonHtml}</td>
+    `;
+
+    elements.historyTableBody.appendChild(row);
+  });
+}
+
+function triggerBlobDownload(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
+function handleHistoryDownload(entryId) {
+  const record = appState.history.find((item) => item.id === entryId);
+  if (!record) return;
+  triggerBlobDownload(record.blob, record.fileName);
+}
+
+function handleGlobalClicks(event) {
+  const downloadButton = event.target.closest('[data-history-download]');
+  if (downloadButton) {
+    const entryId = downloadButton.dataset.historyDownload;
+    handleHistoryDownload(entryId);
   }
 }
 
@@ -794,21 +1089,8 @@ function handleDownloadAudio() {
     return;
   }
 
-  // ファイル名を生成（タイムスタンプベース）
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
-  const filename = `narration_${timestamp}.wav`;
-
-  // Blobからダウンロード
-  const url = URL.createObjectURL(currentSection.blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-
-  console.log('音声をダウンロードしました:', filename);
+  triggerBlobDownload(currentSection.blob, currentSection.fileName);
+  console.log('音声をダウンロードしました:', currentSection.fileName);
 }
 
 /**
@@ -825,6 +1107,75 @@ async function handleRegenerateSection() {
 
   // 音声生成を再実行
   await handleGenerateAudio();
+}
+
+/**
+ * 音声プリセット試聴
+ * B2: 音声プリセット試聴機能
+ */
+async function handlePreviewVoice(speaker) {
+  console.log(`音声プリセット試聴: Speaker ${speaker.toUpperCase()}`);
+
+  // APIキーチェック
+  if (!appState.apiKey) {
+    alert('APIキーが設定されていません。設定メニューからAPIキーを入力してください。');
+    return;
+  }
+
+  // スピーカー設定を取得
+  const voiceSelectId = `speaker-${speaker}-voice`;
+  const voiceSelect = document.getElementById(voiceSelectId);
+
+  if (!voiceSelect) {
+    console.error(`Voice select element not found: ${voiceSelectId}`);
+    return;
+  }
+
+  const selectedVoice = voiceSelect.value;
+  console.log(`選択された音声: ${selectedVoice}`);
+
+  // ボタンを無効化
+  const previewButton = document.querySelector(`[data-testid="preview-voice-${speaker}"]`);
+  const originalButtonText = previewButton ? previewButton.textContent : '▶ 試聴';
+
+  if (previewButton) {
+    previewButton.disabled = true;
+    previewButton.textContent = '生成中...';
+  }
+
+  try {
+    // 短いサンプル音声を生成
+    const result = await geminiClient.generateSingleSpeaker({
+      text: VOICE_PREVIEW_TEXT,
+      voiceName: selectedVoice,
+      languageCode: 'ja-JP'
+    });
+
+    console.log('試聴音声生成完了');
+
+    // 音声を即座に再生
+    const audioBlob = result.blob;
+    const audioUrl = URL.createObjectURL(audioBlob);
+    const audio = new Audio(audioUrl);
+
+    audio.addEventListener('ended', () => {
+      URL.revokeObjectURL(audioUrl);
+      console.log('試聴音声再生終了');
+    });
+
+    audio.play();
+    console.log('試聴音声再生開始');
+
+  } catch (error) {
+    console.error('音声プリセット試聴エラー:', error);
+    alert(`試聴音声の生成に失敗しました: ${error.message}`);
+  } finally {
+    // ボタンを有効化
+    if (previewButton) {
+      previewButton.disabled = false;
+      previewButton.textContent = originalButtonText;
+    }
+  }
 }
 
 /**
