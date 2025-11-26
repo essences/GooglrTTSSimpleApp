@@ -22,7 +22,7 @@ const SAMPLE_SCRIPT = `林: 研修にようこそ。[short pause] 本日はナ�
 const VOICE_PREVIEW_TEXT = 'こんにちは。これは音声プリセットのサンプルです。';
 const MAX_SECTION_RETRIES = 2;
 const RETRY_DELAY_BASE_MS = 1500;
-const PRO_TTS_ENDPOINT = 'http://localhost:8787/api/pro-tts';
+const PRO_TTS_ENDPOINT = 'http://localhost:8788/api/pro-tts';
 
 // モデルごとの価格（USD / 100万トークン）
 const MODEL_PRICING = {

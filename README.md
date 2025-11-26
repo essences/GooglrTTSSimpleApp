@@ -88,6 +88,71 @@ GEMINI_API_KEY=your_api_key_here
 BASE_URL=http://localhost:5500
 ```
 
+### 2.1. Google Cloud Text-to-Speech API のセットアップ（オプション - Proモデル使用時）
+
+Proモデル（`gemini-2.5-pro-tts`）を使用する場合は、Google Cloud Text-to-Speech APIのセットアップが必要です。
+
+#### ステップ1: APIの有効化
+
+1. [Google Cloud Console](https://console.cloud.google.com/) にアクセス
+2. プロジェクトを作成または選択
+3. 画面上部の検索バーで「text-to-speech」と入力
+4. 「Cloud Text-to-Speech API」を選択
+5. 「有効にする」ボタンをクリック
+
+#### ステップ2: サービスアカウント鍵の作成
+
+1. **IAM & Admin → Service Accounts** に移動
+2. 「サービス アカウントを作成」をクリック
+3. サービスアカウント名を入力（例: `tts-service-account`）
+4. ロールで「Cloud Text-to-Speech API ユーザー」を選択
+5. 作成したサービスアカウントの「︙」→「鍵を管理」を選択
+6. 「鍵を追加」→「新しい鍵を作成」をクリック
+7. キーのタイプで「**JSON**」を選択して「作成」
+8. JSON鍵ファイルが自動的にダウンロードされます
+
+#### ステップ3: 環境変数の設定
+
+**Windows の場合:**
+
+1. 「スタートメニュー」を右クリック→「システム」
+2. 「システムの詳細設定」→「環境変数」をクリック
+3. 「新規」をクリックして以下を設定:
+   - 変数名: `GOOGLE_APPLICATION_CREDENTIALS`
+   - 変数値: ダウンロードしたJSONファイルのフルパス
+     ```
+     C:\Users\YourName\keys\tts-service-account.json
+     ```
+4. コマンドプロンプトまたはPowerShellを再起動
+
+**コマンドラインで一時的に設定（Windows）:**
+```cmd
+set GOOGLE_APPLICATION_CREDENTIALS=C:\path\to\service-account-key.json
+```
+
+**PowerShellの場合:**
+```powershell
+$env:GOOGLE_APPLICATION_CREDENTIALS="C:\path\to\service-account-key.json"
+```
+
+#### ステップ4: 設定の確認
+
+```cmd
+echo %GOOGLE_APPLICATION_CREDENTIALS%
+```
+
+#### 重要な注意事項
+
+- ⚠️ JSON鍵ファイルは安全な場所に保管してください
+- ⚠️ 鍵ファイルをGitリポジトリにコミットしないでください
+- ⚠️ `.gitignore`に鍵ファイルのパスを追加してください
+
+#### 参考リンク
+
+- [Google Cloud Text-to-Speech API ドキュメント](https://cloud.google.com/text-to-speech/docs)
+- [サービスアカウント鍵の作成](https://cloud.google.com/iam/docs/keys-create-delete)
+- [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials)
+
 ### 3. アプリケーション起動
 
 **方法1: Live Server（VS Code拡張機能）**
@@ -317,6 +382,9 @@ ISC
 - [ ] Gemini API キーを取得済み
 - [ ] 依存関係をインストール済み
 - [ ] `.env` ファイルを作成し、APIキーを設定済み
+- [ ] （Proモデル使用時）Google Cloud Text-to-Speech APIを有効化済み
+- [ ] （Proモデル使用時）サービスアカウント鍵をダウンロード済み
+- [ ] （Proモデル使用時）`GOOGLE_APPLICATION_CREDENTIALS`環境変数を設定済み
 - [ ] [クイックリファレンス](./Doc/quick-reference.md)を確認済み
 
 ### 毎日の終わり
