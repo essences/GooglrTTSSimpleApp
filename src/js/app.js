@@ -22,6 +22,7 @@ const SAMPLE_SCRIPT = `林: 研修にようこそ。[short pause] 本日はナ�
 const VOICE_PREVIEW_TEXT = 'こんにちは。これは音声プリセットのサンプルです。';
 const MAX_SECTION_RETRIES = 2;
 const RETRY_DELAY_BASE_MS = 1500;
+const PRO_TTS_ENDPOINT = 'http://localhost:8787/api/pro-tts';
 
 // モデルごとの価格（USD / 100万トークン）
 const MODEL_PRICING = {
@@ -1314,6 +1315,10 @@ function updateModelSafetyNotice() {
 async function generateAudioFromScript(script, speakerConfig) {
   console.log('音声生成API呼び出し:', { script, speakerConfig });
 
+  if (isProModel(appState.settings.selectedModel)) {
+    return generateAudioViaServer(script, speakerConfig);
+  }
+
   // 単一話者か複数話者か判定
   const segments = parseSpeakerSegments(script);
   const keyedSegments = assignSpeakerKeysToSegments(segments, speakerConfig);
@@ -1389,6 +1394,51 @@ async function generateAudioFromScript(script, speakerConfig) {
     speakers: normalizeSpeakersRecord(speakerConfig),
     modelName: appState.settings.selectedModel,
     usage: usageMetadata
+  };
+}
+
+async function generateAudioViaServer(script, speakerConfig) {
+  if (!appState.apiKey) {
+    throw new Error('APIキーが設定されていません。設定からキーを入力してください。');
+  }
+
+  setProgressStatusText('Gemini 2.5 Pro TTS を呼び出しています...');
+
+  let response;
+  try {
+    response = await fetch(PRO_TTS_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        apiKey: appState.apiKey,
+        script,
+        speakerConfig,
+        generationConfig: {
+          temperature: appState.settings.temperature
+        },
+        model: appState.settings.selectedModel
+      })
+    });
+  } catch (networkError) {
+    throw new Error(`Pro TTS サーバーへの接続に失敗しました: ${networkError.message}`);
+  }
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data?.success) {
+    throw new Error(data?.error || `Pro TTS サーバーエラー (${response.status})`);
+  }
+
+  const audioBlob = base64ToBlob(data.audioBase64, data.mimeType || 'audio/wav');
+  return {
+    blob: audioBlob,
+    mimeType: data.mimeType || 'audio/wav',
+    script,
+    timestamp: new Date().toISOString(),
+    speakers: normalizeSpeakersRecord(speakerConfig),
+    modelName: data.modelName || appState.settings.selectedModel,
+    usage: data.usage || null
   };
 }
 
@@ -1732,6 +1782,18 @@ function triggerBlobDownload(blob, fileName) {
   anchor.click();
   document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
+}
+
+function base64ToBlob(base64Data, mimeType = 'application/octet-stream') {
+  if (!base64Data) {
+    return new Blob([], { type: mimeType });
+  }
+  const byteCharacters = atob(base64Data);
+  const byteArrays = new Uint8Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i += 1) {
+    byteArrays[i] = byteCharacters.charCodeAt(i);
+  }
+  return new Blob([byteArrays], { type: mimeType });
 }
 
 function handleHistoryDownload(entryId) {
