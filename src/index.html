@@ -205,6 +205,9 @@
           <option value="gemini-1.5-flash-tts">Gemini 1.5 Flash TTS</option>
         </select>
         <p id="model-cost-display" class="model-cost-note">料金情報を読み込み中...</p>
+        <p id="model-warning" class="model-warning" style="display: none;">
+          ※ Gemini 2.5 Pro TTS を選択した場合、ブラウザに保存された API キーが直接 Google API に送信されます。キー管理は利用者の責任で行ってください。
+        </p>
 
         <label for="output-format">Output format</label>
         <select id="output-format" data-testid="output-format">

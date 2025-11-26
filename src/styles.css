@@ -182,6 +182,16 @@ label {
   margin: 4px 0 12px;
 }
 
+.model-warning {
+  font-size: 0.82rem;
+  color: #b45309;
+  background: #fffbeb;
+  border-left: 4px solid #f97316;
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin: 0 0 12px;
+}
+
 .form-group {
   margin-bottom: 16px;
 }

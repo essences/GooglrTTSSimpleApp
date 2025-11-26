@@ -42,6 +42,8 @@ const MODEL_PRICING = {
   }
 };
 
+const PRO_TTS_MODELS = new Set(['gemini-2.5-pro-tts']);
+
 const DEFAULT_SPEAKERS = {
   a: { name: '林', voice: 'Kore', style: '落ち着いたトーン' },
   b: { name: '彩', voice: 'Puck', style: '明るく親しみやすい' }
@@ -1289,6 +1291,20 @@ function updateModelCostDisplay() {
   const outputJpy = Math.round(outputUsd * USD_TO_JPY).toLocaleString('ja-JP');
 
   display.textContent = `入力: $${inputUsd.toFixed(2)} (約${inputJpy}円) /100万テキストトークン、出力: $${outputUsd.toFixed(2)} (約${outputJpy}円) /100万音声トークン`;
+
+  updateModelSafetyNotice();
+}
+
+function isProModel(modelName) {
+  return PRO_TTS_MODELS.has(modelName);
+}
+
+function updateModelSafetyNotice() {
+  const notice = document.getElementById('model-warning');
+  if (!notice) return;
+
+  const isPro = isProModel(appState.settings.selectedModel);
+  notice.style.display = isPro ? 'block' : 'none';
 }
 
 /**
