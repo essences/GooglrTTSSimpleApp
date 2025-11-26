@@ -20,6 +20,8 @@ const SAMPLE_SCRIPT = `林: 研修にようこそ。[short pause] 本日はナ�
 彩: [sarcasm] わかりました。[short pause] 私も担当パートを追加しておきますね。
 [laughing] 林: では実践してみましょう。`;
 const VOICE_PREVIEW_TEXT = 'こんにちは。これは音声プリセットのサンプルです。';
+const MAX_SECTION_RETRIES = 2;
+const RETRY_DELAY_BASE_MS = 1500;
 
 // モデルごとの価格（USD / 100万トークン）
 const MODEL_PRICING = {
@@ -58,7 +60,8 @@ const appState = {
   },
   history: [],
   generatedSections: [], // 生成された音声セクション
-  currentSectionIndex: 0
+  currentSectionIndex: 0,
+  activeHistoryId: null
 };
 
 let pendingConfirmAction = null;
@@ -97,7 +100,8 @@ function initApp() {
     confirmPrimaryButton: document.querySelector('[data-testid="confirm-primary-button"]'),
     historyTableBody: document.getElementById('history-tbody'),
     slideCurrent: document.getElementById('current-section'),
-    slideTotal: document.getElementById('total-sections')
+    slideTotal: document.getElementById('total-sections'),
+    progressStatus: document.getElementById('progress-status')
   };
 
   confirmButtonDefaults = {
@@ -176,6 +180,15 @@ function setupEventListeners() {
 
   // 原稿入力の文字数カウント
   elements.scriptTextarea.addEventListener('input', updateCharCount);
+
+  const prevSectionButton = document.querySelector('[data-testid="prev-section-button"]');
+  if (prevSectionButton) {
+    prevSectionButton.addEventListener('click', handlePrevSection);
+  }
+  const nextSectionButton = document.querySelector('[data-testid="next-section-button"]');
+  if (nextSectionButton) {
+    nextSectionButton.addEventListener('click', handleNextSection);
+  }
 
   // モデル選択
   const aiModelSelect = document.getElementById('ai-model');
@@ -838,6 +851,159 @@ function assignSpeakerKeysToSegments(segments, speakerConfig) {
   });
 }
 
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function setProgressStatusText(text = '', { isError = false } = {}) {
+  const statusElement = elements.progressStatus;
+  if (!statusElement) return;
+
+  if (text) {
+    statusElement.textContent = text;
+    statusElement.style.display = 'block';
+    statusElement.classList.toggle('error', Boolean(isError));
+  } else {
+    statusElement.textContent = '';
+    statusElement.style.display = 'none';
+    statusElement.classList.remove('error');
+  }
+}
+
+function splitScriptIntoSections(script, maxChars = 800) {
+  const normalized = script.replace(/\r/g, '\n').trim();
+  if (!normalized) return [];
+
+  // 1. ユーザー定義区切り（---）で分割
+  const manualSections = normalized
+    .split(/\n-{3,}\n/g)
+    .map((section) => section.trim())
+    .filter(Boolean);
+  if (manualSections.length > 1) {
+    return manualSections;
+  }
+
+  // 2. 空行（段落）で分割
+  const blankLineSections = normalized
+    .split(/\n\s*\n+/g)
+    .map((section) => section.trim())
+    .filter(Boolean);
+  if (blankLineSections.length > 1) {
+    return blankLineSections;
+  }
+
+  // 3. 自動チャンク（maxCharsごと）
+  if (normalized.length <= maxChars) {
+    return [normalized];
+  }
+
+  const sections = [];
+  let remaining = normalized;
+
+  while (remaining.length > maxChars) {
+    const splitIndex = findSectionBreakPoint(remaining, maxChars);
+    sections.push(remaining.slice(0, splitIndex).trim());
+    remaining = remaining.slice(splitIndex).trim();
+  }
+
+  if (remaining) {
+    sections.push(remaining.trim());
+  }
+
+  return sections;
+}
+
+function findSectionBreakPoint(text, maxChars) {
+  const breakCandidates = [
+    text.lastIndexOf('\n', maxChars),
+    text.lastIndexOf('。', maxChars),
+    text.lastIndexOf('？', maxChars),
+    text.lastIndexOf('！', maxChars),
+    text.lastIndexOf('.', maxChars),
+    text.lastIndexOf('?', maxChars),
+    text.lastIndexOf('!', maxChars)
+  ].filter((index) => index >= Math.floor(maxChars * 0.4));
+
+  if (breakCandidates.length > 0) {
+    return Math.max(...breakCandidates) + 1;
+  }
+
+  return maxChars;
+}
+
+function aggregateSectionCost(sections) {
+  if (!Array.isArray(sections) || sections.length === 0) return null;
+
+  let usd = 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
+
+  sections.forEach((section) => {
+    if (!section?.cost) return;
+    usd += section.cost.usd || 0;
+    inputTokens += section.cost.inputTokens || 0;
+    outputTokens += section.cost.outputTokens || 0;
+  });
+
+  if (usd === 0 && inputTokens === 0 && outputTokens === 0) {
+    return null;
+  }
+
+  return {
+    usd,
+    jpy: usd * USD_TO_JPY,
+    inputTokens,
+    outputTokens
+  };
+}
+
+function createHistoryRunRecord(sections, fullScript) {
+  const timestamp = new Date().toISOString();
+  const safeTimestamp = timestamp.replace(/[:.]/g, '-').substring(0, 19);
+  const totalDuration = sections.reduce((sum, section) => sum + (section.duration || 0), 0);
+  const aggregatedCost = aggregateSectionCost(sections);
+  const modelName = sections[0]?.modelName || appState.settings.selectedModel;
+  const primarySection = sections[0] || {};
+
+  return {
+    id: `run_${safeTimestamp}`,
+    timestamp,
+    script: fullScript,
+    scriptSnippet: fullScript?.substring(0, 120) ?? '',
+    modelName,
+    speakers: normalizeSpeakersRecord(sections[0]?.speakers),
+    sectionCount: sections.length,
+    duration: totalDuration,
+    cost: aggregatedCost,
+    mimeType: primarySection.mimeType,
+    fileName: primarySection.fileName,
+    sections
+  };
+}
+
+function getSectionsFromRecord(record) {
+  if (Array.isArray(record?.sections) && record.sections.length > 0) {
+    return record.sections;
+  }
+  return record ? [record] : [];
+}
+
+function updateHistorySectionRecord(historyId, sectionIndex, updatedRecord) {
+  if (!historyId) return;
+  const historyEntry = appState.history.find((entry) => entry.id === historyId);
+  if (!historyEntry || !Array.isArray(historyEntry.sections)) {
+    return;
+  }
+
+  historyEntry.sections[sectionIndex] = { ...updatedRecord };
+  historyEntry.duration = historyEntry.sections.reduce((sum, section) => sum + (section.duration || 0), 0);
+  historyEntry.cost = aggregateSectionCost(historyEntry.sections) || null;
+  historyEntry.sectionCount = historyEntry.sections.length;
+  saveHistoryToStorage();
+}
+
 /**
  * 音声生成メイン処理
  * PBI-010: 音声生成メイン処理
@@ -864,18 +1030,39 @@ async function handleGenerateAudio() {
     const script = appState.currentScript;
     console.log('原稿:', script.substring(0, 50) + '...');
 
+    const sectionsToGenerate = splitScriptIntoSections(script);
+    if (sectionsToGenerate.length === 0) {
+      alert('生成対象の原稿が見つかりません。');
+      return;
+    }
+    const totalSections = sectionsToGenerate.length;
+    console.log(`セクション数: ${totalSections}`);
+
     // UI状態を生成中に変更
     console.log('3. UI状態を生成中に変更...');
     setGeneratingState(true);
+    updateProgressIndicator(0);
+    setProgressStatusText(`セクション 1/${totalSections} の準備を開始します...`);
     console.log('UI状態変更完了');
 
-    // 音声生成処理を実行
-    console.log('4. 音声生成処理を開始...');
-    const result = await generateAudioFromScript(script, speakerConfig);
+    const generatedSections = [];
+
+    for (let index = 0; index < totalSections; index += 1) {
+      const sectionText = sectionsToGenerate[index];
+      console.log(`4.${index + 1} セクション生成開始 (${index + 1}/${totalSections})`);
+      const sectionRecord = await generateSectionWithRetries(sectionText, speakerConfig, index + 1, totalSections);
+      generatedSections.push(sectionRecord);
+
+      const progressPercent = Math.round(((index + 1) / totalSections) * 100);
+      updateProgressIndicator(progressPercent);
+      setProgressStatusText(`セクション ${index + 1}/${totalSections} の生成が完了しました (${progressPercent}%)`);
+    }
+
     console.log('音声生成処理完了');
 
     // プレビュー表示
-    await displayGeneratedAudio(result);
+    await displayGeneratedSections(generatedSections, script);
+    setProgressStatusText('全セクションの生成が完了しました。');
 
     console.log('音声生成が完了しました');
   } catch (error) {
@@ -883,6 +1070,7 @@ async function handleGenerateAudio() {
     console.error('エラーメッセージ:', error.message);
     console.error('エラー詳細:', error.details);
     console.error('エラースタック:', error.stack);
+    setProgressStatusText('音声生成でエラーが発生しました。', { isError: true });
     alert(`音声生成に失敗しました: ${error.message}`);
   } finally {
     setGeneratingState(false);
@@ -995,8 +1183,20 @@ function setGeneratingState(isGenerating) {
     progressBar.style.display = isGenerating ? 'block' : 'none';
   }
 
+  if (!isGenerating) {
+    updateProgressIndicator(0);
+  }
+
   // 原稿入力を無効化/有効化
   elements.scriptTextarea.disabled = isGenerating;
+}
+
+function updateProgressIndicator(percent) {
+  const fill = document.getElementById('progress-bar-fill');
+  if (fill) {
+    const clamped = Math.max(0, Math.min(100, percent || 0));
+    fill.style.width = `${clamped}%`;
+  }
 }
 
 function loadSpeakerSettings() {
@@ -1176,23 +1376,55 @@ async function generateAudioFromScript(script, speakerConfig) {
   };
 }
 
+async function generateSectionWithRetries(sectionText, speakerConfig, sectionNumber, totalSections, maxRetries = MAX_SECTION_RETRIES) {
+  let attempt = 0;
+  let lastError = null;
+
+  while (attempt <= maxRetries) {
+    const attemptLabel = `${sectionNumber}/${totalSections} (試行${attempt + 1})`;
+    try {
+      setProgressStatusText(`セクション ${attemptLabel} を生成中...`);
+      const result = await generateAudioFromScript(sectionText, speakerConfig);
+      const duration = await getAudioDuration(result.blob);
+      const costInfo = calculateCostDetails(result.usage, result.script, duration, result.modelName);
+      return createSectionRecord(result, duration, costInfo);
+    } catch (error) {
+      lastError = error;
+      attempt += 1;
+      if (attempt > maxRetries) {
+        break;
+      }
+      const waitMs = RETRY_DELAY_BASE_MS * attempt;
+      const waitSeconds = (waitMs / 1000).toFixed(1);
+      console.warn(`セクション ${sectionNumber}/${totalSections} の生成に失敗。${waitSeconds}s 後に再試行 (${attempt}/${maxRetries + 1})`, error);
+      setProgressStatusText(`セクション ${sectionNumber}/${totalSections} の生成に失敗。${waitSeconds}秒後に再試行 (${attempt}/${maxRetries + 1})`, { isError: true });
+      await delay(waitMs);
+    }
+  }
+
+  const errorMessage = lastError instanceof Error ? lastError.message : '不明なエラー';
+  throw new Error(`セクション ${sectionNumber}/${totalSections} の生成に失敗しました (${maxRetries + 1}回試行)。${errorMessage}`);
+}
+
 /**
- * 生成された音声を表示
- * Phase 3で詳細実装
+ * 生成された音声セクションを表示
  */
-async function displayGeneratedAudio(result) {
-  console.log('音声プレビューを表示:', result);
+async function displayGeneratedSections(sectionRecords, fullScript) {
+  if (!Array.isArray(sectionRecords) || sectionRecords.length === 0) {
+    alert('生成結果がありませんでした。');
+    return;
+  }
 
-  // 音声の長さを取得してコストを計算
-  const duration = await getAudioDuration(result.blob);
-  const costInfo = calculateCostDetails(result.usage, result.script, duration, result.modelName);
+  console.log(`音声プレビューを表示: ${sectionRecords.length} セクション`);
 
-  const sectionRecord = createSectionRecord(result, duration, costInfo);
-  appState.generatedSections = [sectionRecord];
+  appState.generatedSections = sectionRecords;
   appState.currentSectionIndex = 0;
 
-  showSectionPreview(sectionRecord, 1, 1);
-  addHistoryEntry(sectionRecord);
+  showSectionPreview(sectionRecords[0], 1, sectionRecords.length);
+
+  const historyRecord = createHistoryRunRecord(sectionRecords, fullScript);
+  appState.activeHistoryId = historyRecord.id;
+  addHistoryEntry(historyRecord);
   renderHistoryTable();
   showGenerationCompleteMessage();
 }
@@ -1228,6 +1460,7 @@ function showSectionPreview(record, currentIndex, totalCount) {
   if (elements.slideTotal) {
     elements.slideTotal.textContent = String(totalCount).padStart(2, '0');
   }
+  updateSectionNavigationState(currentIndex, totalCount);
 
   // コスト表示
   const sectionCost = document.getElementById('section-cost');
@@ -1252,12 +1485,52 @@ function showSectionPreview(record, currentIndex, totalCount) {
       URL.revokeObjectURL(audioElement.dataset.previewUrl);
     }
 
-    const previewUrl = URL.createObjectURL(record.blob);
-    audioElement.dataset.previewUrl = previewUrl;
-    audioElement.src = previewUrl;
-    audioElement.load();
+    if (record.blob) {
+      const previewUrl = URL.createObjectURL(record.blob);
+      audioElement.dataset.previewUrl = previewUrl;
+      audioElement.src = previewUrl;
+      audioElement.load();
+    } else {
+      audioElement.dataset.previewUrl = '';
+      audioElement.removeAttribute('src');
+      audioElement.load();
+    }
+  }
+
+  const playButton = document.querySelector('[data-testid="play-button"]');
+  const pauseButton = document.querySelector('[data-testid="pause-button"]');
+  const downloadButton = document.querySelector('[data-testid="download-button"]');
+
+  const hasAudio = Boolean(record.blob);
+  if (playButton) playButton.disabled = !hasAudio;
+  if (pauseButton) pauseButton.disabled = !hasAudio;
+  if (downloadButton) downloadButton.disabled = !hasAudio;
+}
+
+function updateSectionNavigationState(currentIndex, totalCount) {
+  const prevButton = document.querySelector('[data-testid="prev-section-button"]');
+  const nextButton = document.querySelector('[data-testid="next-section-button"]');
+
+  if (prevButton) {
+    prevButton.disabled = currentIndex <= 1;
+  }
+  if (nextButton) {
+    nextButton.disabled = currentIndex >= totalCount;
   }
 }
+
+function showSectionByIndex(index) {
+  if (!Array.isArray(appState.generatedSections) || appState.generatedSections.length === 0) {
+    return;
+  }
+  if (index < 0 || index >= appState.generatedSections.length) {
+    return;
+  }
+  appState.currentSectionIndex = index;
+  const record = appState.generatedSections[index];
+  showSectionPreview(record, index + 1, appState.generatedSections.length);
+}
+
 
 function showGenerationCompleteMessage() {
   const completeMessage = document.querySelector('[data-testid="generation-complete"]');
@@ -1270,8 +1543,13 @@ function showGenerationCompleteMessage() {
 }
 
 function addHistoryEntry(record) {
+  const clonedSections = Array.isArray(record.sections)
+    ? record.sections.map((section) => ({ ...section }))
+    : null;
+
   appState.history.unshift({
-    ...record
+    ...record,
+    sections: clonedSections
   });
 
   // localStorage に保存（B5）
@@ -1285,19 +1563,38 @@ function addHistoryEntry(record) {
 function saveHistoryToStorage() {
   try {
     // Blob は保存できないため、メタデータのみを保存
-    const historyMetadata = appState.history.map((entry) => ({
-      id: entry.id,
-      script: entry.script,
-      timestamp: entry.timestamp,
-      scriptSnippet: entry.scriptSnippet,
-      mimeType: entry.mimeType,
-      fileName: entry.fileName,
-      speakers: normalizeSpeakersRecord(entry.speakers),
-      modelName: entry.modelName,
-      duration: entry.duration,
-      cost: entry.cost
-      // blob は除外
-    }));
+    const historyMetadata = appState.history.map((entry) => {
+      const sections = getSectionsFromRecord(entry);
+      const serializedSections = Array.isArray(entry.sections)
+        ? entry.sections.map((section) => ({
+            id: section.id,
+            script: section.script,
+            scriptSnippet: section.scriptSnippet,
+            timestamp: section.timestamp,
+            speakers: section.speakers,
+            mimeType: section.mimeType,
+            fileName: section.fileName,
+            modelName: section.modelName,
+            duration: section.duration,
+            cost: section.cost
+          }))
+        : null;
+
+      return {
+        id: entry.id,
+        script: entry.script,
+        timestamp: entry.timestamp,
+        scriptSnippet: entry.scriptSnippet,
+        mimeType: entry.mimeType || sections[0]?.mimeType,
+        fileName: entry.fileName || sections[0]?.fileName,
+        speakers: normalizeSpeakersRecord(entry.speakers),
+        modelName: entry.modelName,
+        duration: entry.duration,
+        cost: entry.cost,
+        sectionCount: entry.sectionCount || sections.length,
+        sections: serializedSections
+      };
+    });
 
     localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(historyMetadata));
     console.log('履歴を localStorage に保存しました');
@@ -1329,11 +1626,20 @@ function loadHistoryFromStorage() {
       const normalizedCost = typeof meta.cost === 'number'
         ? { usd: meta.cost, jpy: meta.cost * USD_TO_JPY }
         : meta.cost || null;
+      const normalizedSections = Array.isArray(meta.sections)
+        ? meta.sections.map((section) => ({
+            ...section,
+            blob: null,
+            speakers: normalizeSpeakersRecord(section.speakers)
+          }))
+        : null;
 
       return {
         ...meta,
         blob: null,
         cost: normalizedCost,
+        sections: normalizedSections,
+        sectionCount: meta.sectionCount || (normalizedSections?.length ?? 1),
         speakers: normalizeSpeakersRecord(meta.speakers)
       };
     });
@@ -1362,9 +1668,11 @@ function renderHistoryTable() {
 
   appState.history.forEach((entry, index) => {
     const row = document.createElement('tr');
+    const sections = getSectionsFromRecord(entry);
+    const sectionCount = entry.sectionCount || sections.length;
 
     // Blob がない場合はダウンロードボタンを無効化
-    const hasBlob = entry.blob !== null && entry.blob !== undefined;
+    const hasBlob = sections.some((section) => section.blob);
     const playButtonHtml = hasBlob
       ? `<button class="btn btn-small" data-history-play="${entry.id}">▶ Play</button>`
       : `<button class="btn btn-small" disabled title="このセッションでは音声データがありません">▶ Play</button>`;
@@ -1374,19 +1682,22 @@ function renderHistoryTable() {
     const downloadInfoButton = `<button class="btn btn-small" data-history-download="${entry.id}">⬇ Info</button>`;
 
     // 長さとコストの表示
-    const durationText = entry.duration ? `${entry.duration.toFixed(1)}秒` : '--';
+    const totalDuration = entry.duration || sections.reduce((sum, section) => sum + (section.duration || 0), 0);
+    const durationText = totalDuration ? `${totalDuration.toFixed(1)}秒` : '--';
     const costInfo = typeof entry.cost === 'number'
       ? { usd: entry.cost, jpy: entry.cost * USD_TO_JPY }
-      : entry.cost;
+      : entry.cost || aggregateSectionCost(sections);
     const costText = costInfo
       ? `<span title="入力:${formatTokenCount(costInfo.inputTokens)} / 出力:${formatTokenCount(costInfo.outputTokens)}">${formatCostDisplay(costInfo)}</span>`
       : '--';
+    const primarySection = sections[0] || {};
+    const formatLabel = sectionCount > 1 ? 'MULTI' : (primarySection.mimeType?.toUpperCase() || 'audio/wav');
 
     row.innerHTML = `
       <td>${String(index + 1).padStart(2, '0')}</td>
       <td>${new Date(entry.timestamp).toLocaleString()}</td>
-      <td title="${entry.scriptSnippet || ''}">1 セクション</td>
-      <td>${entry.mimeType?.toUpperCase() || 'audio/wav'}</td>
+      <td title="${entry.scriptSnippet || ''}">${sectionCount} セクション</td>
+      <td>${formatLabel}</td>
       <td>${durationText}</td>
       <td>${costText}</td>
       <td>${playButtonHtml} ${downloadAudioButton} ${downloadInfoButton}</td>
@@ -1410,6 +1721,7 @@ function triggerBlobDownload(blob, fileName) {
 function handleHistoryDownload(entryId) {
   const record = appState.history.find((item) => item.id === entryId);
   if (!record) return;
+  const sections = getSectionsFromRecord(record);
 
   const lines = [];
   lines.push(`Timestamp: ${new Date(record.timestamp).toLocaleString()}`);
@@ -1418,6 +1730,13 @@ function handleHistoryDownload(entryId) {
   lines.push('Speaker Settings:');
   lines.push(`  Speaker A: ${formatSpeakerInfo(record.speakers?.a)}`);
   lines.push(`  Speaker B: ${formatSpeakerInfo(record.speakers?.b)}`);
+   lines.push('');
+   lines.push(`Sections: ${sections.length}`);
+   sections.forEach((section, index) => {
+     const durationText = section.duration ? `${section.duration.toFixed(1)} sec` : '--';
+     const costText = section.cost ? formatCostDisplay(section.cost) : '--';
+     lines.push(`  [${String(index + 1).padStart(2, '0')}] Duration: ${durationText}, Cost: ${costText}`);
+   });
   lines.push('');
   lines.push('Script:');
   lines.push(record.script || '(No script stored)');
@@ -1451,25 +1770,38 @@ function handleGlobalClicks(event) {
 function handleHistoryPlay(entryId) {
   const record = appState.history.find((item) => item.id === entryId);
   if (!record) return;
-  if (!record.blob) {
-    alert('この履歴の音声データは現在のセッションでは再生できません。');
+  const sections = getSectionsFromRecord(record);
+
+  if (!sections.length) {
+    alert('再生できるセクションが見つかりません。');
     return;
   }
 
-  appState.generatedSections = [record];
+  appState.generatedSections = sections.map((section) => ({ ...section }));
   appState.currentSectionIndex = 0;
-  showSectionPreview(record, 1, 1);
+  appState.activeHistoryId = record.id;
+  showSectionPreview(appState.generatedSections[0], 1, appState.generatedSections.length);
+  if (!appState.generatedSections[0].blob) {
+    alert('この履歴には音声データが保存されていません。再生するには再生成を行ってください。');
+  }
   window.scrollTo({top: 0, behavior: 'smooth'});
 }
 
 function handleHistoryAudioDownload(entryId) {
   const record = appState.history.find((item) => item.id === entryId);
-  if (!record || !record.blob) {
+  if (!record) {
+    alert('この履歴が見つかりません。');
+    return;
+  }
+
+  const sections = getSectionsFromRecord(record);
+  const targetSection = sections.find((section) => section.blob);
+  if (!targetSection) {
     alert('この履歴の音声データは現在のセッションではダウンロードできません。');
     return;
   }
 
-  triggerBlobDownload(record.blob, record.fileName);
+  triggerBlobDownload(targetSection.blob, targetSection.fileName || 'narration.wav');
 }
 
 /**
@@ -1526,20 +1858,51 @@ function handleDownloadAudio() {
   console.log('音声をダウンロードしました:', currentSection.fileName);
 }
 
+function handlePrevSection() {
+  showSectionByIndex(appState.currentSectionIndex - 1);
+}
+
+function handleNextSection() {
+  showSectionByIndex(appState.currentSectionIndex + 1);
+}
+
 /**
  * セクションの再生成
  */
 async function handleRegenerateSection() {
-  if (!appState.currentScript) {
-    alert('原稿がありません。');
+  if (!Array.isArray(appState.generatedSections) || appState.generatedSections.length === 0) {
+    alert('再生成できるセクションがありません。');
+    return;
+  }
+
+  const targetIndex = appState.currentSectionIndex;
+  const targetSection = appState.generatedSections[targetIndex];
+  if (!targetSection) {
+    alert('再生成対象のセクションが見つかりません。');
     return;
   }
 
   const confirmed = confirm('現在のセクションを再生成しますか？');
   if (!confirmed) return;
 
-  // 音声生成を再実行
-  await handleGenerateAudio();
+  try {
+    setGeneratingState(true);
+    const speakerConfig = getSpeakerConfiguration();
+    const result = await generateAudioFromScript(targetSection.script, speakerConfig);
+    const duration = await getAudioDuration(result.blob);
+    const costInfo = calculateCostDetails(result.usage, result.script, duration, result.modelName);
+    const updatedRecord = createSectionRecord(result, duration, costInfo);
+    appState.generatedSections[targetIndex] = updatedRecord;
+    showSectionPreview(updatedRecord, targetIndex + 1, appState.generatedSections.length);
+    updateHistorySectionRecord(appState.activeHistoryId, targetIndex, updatedRecord);
+    renderHistoryTable();
+    alert('セクションを再生成しました。');
+  } catch (error) {
+    console.error('セクションの再生成に失敗しました:', error);
+    alert(`セクションの再生成に失敗しました: ${error.message || error}`);
+  } finally {
+    setGeneratingState(false);
+  }
 }
 
 /**

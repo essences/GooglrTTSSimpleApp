@@ -254,6 +254,7 @@
         <div class="progress" data-testid="progress-bar" style="display: none;">
           <div class="progress-bar" id="progress-bar-fill"></div>
         </div>
+        <p id="progress-status" class="progress-status" data-testid="progress-status" style="display: none;"></p>
 
         <div data-testid="generation-complete" style="display: none;">
           生成完了！
@@ -268,6 +269,10 @@
         Slide <span id="current-section">01</span> / <span id="total-sections">01</span>
         <span id="section-cost" style="margin-left: 20px; color: #15803d; font-weight: 600;"></span>
       </p>
+      <div class="section-nav">
+        <button data-testid="prev-section-button" class="btn-small">← 前のセクション</button>
+        <button data-testid="next-section-button" class="btn-small">次のセクション →</button>
+      </div>
 
       <div class="audio-player-container" data-testid="audio-player">
         <audio id="audio-element" controls></audio>

@@ -259,6 +259,16 @@ label {
   transition: width 0.3s;
 }
 
+.progress-status {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.progress-status.error {
+  color: #dc2626;
+}
+
 /* 音声プレーヤー */
 .audio-player-container {
   margin: 16px 0;
@@ -272,6 +282,16 @@ label {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.section-nav {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.section-nav .btn-small {
+  min-width: 140px;
 }
 
 /* テーブル */

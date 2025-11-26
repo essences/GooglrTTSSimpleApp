@@ -59,9 +59,9 @@
 | B1 | TXT ファイルインポートで原稿を読み込みたい | ✅ Done | `handleImportTxt` 実装済み。FileReader で UTF-8 読込、5MB 制限、確認ダイアログ付き。 |
 | B2 | 音声プリセットごとの試聴をワンクリックで行いたい | ✅ Done | `handlePreviewVoice` 実装済み。サンプルテキストで短時間音声を即時生成・再生。 |
 | B3 | スピーカー設定のバリデーション (必須項目、タグ重複) を行いたい | ✅ Done | `validateGenerationInputs` 強化済み。名前重複・原稿内存在・フォーマット検証を実装。 |
-| B4 | 生成を複数セクションに分割し、再生成/並行ダウンロードしたい | 🔜 Future | `generatedSections` 配列は実装済み。セクション分割ロジックが必要。 |
+| B4 | 生成を複数セクションに分割し、再生成/並行ダウンロードしたい | ✅ Done | `splitScriptIntoSections` と `generateSectionWithRetries` により章ごとに自動分割。Prev/Next・再生成・DL をセクション単位で提供。 |
 | B5 | 履歴一覧を localStorage に保存し、ページ再訪でも参照したい | ✅ Done | `saveHistoryToStorage` / `loadHistoryFromStorage` 実装済み。メタデータのみ永続化。 |
-| B6 | 生成失敗時のリトライ・再接続を行いたい | 🔜 Future | 現状は alert のみ。リトライ回数やログの仕組みを検討。 |
+| B6 | 生成失敗時のリトライ・再接続を行いたい | ✅ Done | 各セクション生成を最大3試行まで自動リトライし、進捗ステータスに再試行状況とエラーメッセージを表示。 |
 
 ---
 
