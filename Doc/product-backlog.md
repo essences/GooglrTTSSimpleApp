@@ -727,22 +727,23 @@ Joe: Let's start with the dashboard overview...
 
 ---
 
-#### PBI-036: Gemini 2.5 Pro TTS 直接呼び出し対応 【優先度: 中】
-**ストーリー**: ユーザーとして、ブラウザに保存した API キーを使って Gemini 2.5 Pro TTS も利用したい
+#### PBI-036: Gemini 2.5 Pro TTS サーバー経由対応（サービスアカウント）【優先度: 中】
+**ストーリー**: ユーザーとして、Pro TTS をサービスアカウントで安全に呼び出せるプロキシ経由で使いたい
 
 **受入基準**:
-- [ ] モデル選択で「Gemini 2.5 Pro TTS」が選択できる
-- [ ] Pro TTS 選択時はフロントエンドが localStorage の `GEMINI_API_KEY` をそのまま使って API を呼び出す
-- [ ] Flash TTS と Pro TTS の切替を UI で明示し、「API キーは利用者の責任で管理する」旨の注意文を表示する
+- [ ] モデル選択で「Gemini 2.5 Pro TTS」が選択でき、選択時はブラウザではなくサーバー経由で呼び出す
+- [ ] サーバーは Google Cloud サービスアカウント認証を使用し、フロントから生 API キーを送らせない
+- [ ] サーバーの `/health` が 200 を返し、疎通確認ができる
 - [ ] Pro TTS 成功時も既存フロー（コスト計算・履歴保存・試聴）がそのまま動作する
-- [ ] エラー時にはモデル未対応/権限不足などのメッセージをユーザーに返す
+- [ ] エラー時には権限不足/モデル未対応などのメッセージをユーザーに返す
+- [ ] README/利用ガイドに「Pro TTS はサービスアカウント経由で動く」旨とセットアップ手順を追記する
 
 **見積もり**: 5 SP
 
 **技術メモ**:
-- `@google/generative-ai` をフロントで利用し続ける。サーバー側にはキーを置かない。
-- `GeminiTtsClient` に Pro TTS 用設定（モデル ID、`speechConfig` 等）を追加し、UI から切り替え。
-- API キー漏洩リスクがユーザーに帰属することを UI 上で明示する。
+- Python 版 `server/pro_tts_service.py` または Node 版を常駐させ、`GOOGLE_APPLICATION_CREDENTIALS` を読み込ませる
+- フロントの Pro TTS 呼び出しはプロキシ URL に POST する実装に変更し、API キー送信を禁止
+- サーバー側で CORS を許可しつつ、簡易レート制限・ロギングを入れる
 
 ---
 
