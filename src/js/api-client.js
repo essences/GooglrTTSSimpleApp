@@ -224,9 +224,11 @@ export class GeminiTtsClient {
   }
 }
 
-// グローバルに公開（後方互換性のため）
-window.GeminiApiError = GeminiApiError;
-window.GeminiTtsClient = GeminiTtsClient;
+// グローバルに公開（後方互換性のため、ブラウザ環境のみ）
+if (typeof window !== 'undefined') {
+  window.GeminiApiError = GeminiApiError;
+  window.GeminiTtsClient = GeminiTtsClient;
+}
 
 function convertPcm16ToWav(pcmBytes, sampleRate = 24000) {
   const headerSize = 44;

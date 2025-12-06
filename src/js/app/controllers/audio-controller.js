@@ -1,20 +1,38 @@
-import { triggerBlobDownload } from '../services/audio-utils.js';
+import { triggerBlobDownload as defaultTriggerBlobDownload } from '../services/audio-utils.js';
 
-export function createAudioController({
-  appState,
-  getSpeakerConfiguration,
-  generateAudioFromScript,
-  getAudioDuration,
-  calculateCostDetails,
-  createSectionRecord,
-  updateHistorySectionRecord,
-  showSectionPreview,
-  refreshHistoryTable,
-  setGeneratingState,
-  getSectionsFromRecord
-}) {
-  function handlePlayAudio() {
-    const audioElement = document.getElementById('audio-element');
+export class AudioController {
+  constructor({
+    appState,
+    getSpeakerConfiguration,
+    generateAudioFromScript,
+    getAudioDuration,
+    calculateCostDetails,
+    createSectionRecord,
+    updateHistorySectionRecord,
+    showSectionPreview,
+    refreshHistoryTable,
+    setGeneratingState,
+    getSectionsFromRecord,
+    documentRef = document,
+    triggerBlobDownload = defaultTriggerBlobDownload
+  }) {
+    this.appState = appState;
+    this.getSpeakerConfiguration = getSpeakerConfiguration;
+    this.generateAudioFromScript = generateAudioFromScript;
+    this.getAudioDuration = getAudioDuration;
+    this.calculateCostDetails = calculateCostDetails;
+    this.createSectionRecord = createSectionRecord;
+    this.updateHistorySectionRecord = updateHistorySectionRecord;
+    this.showSectionPreview = showSectionPreview;
+    this.refreshHistoryTable = refreshHistoryTable;
+    this.setGeneratingState = setGeneratingState;
+    this.getSectionsFromRecord = getSectionsFromRecord;
+    this.documentRef = documentRef;
+    this.triggerBlobDownload = triggerBlobDownload;
+  }
+
+  handlePlayAudio = () => {
+    const audioElement = this.documentRef.getElementById('audio-element');
     if (!audioElement || !audioElement.src) {
       alert('再生する音声がありません。');
       return;
@@ -22,83 +40,83 @@ export function createAudioController({
 
     audioElement.play();
 
-    const playButton = document.querySelector('[data-testid="play-button"]');
-    const pauseButton = document.querySelector('[data-testid="pause-button"]');
+    const playButton = this.documentRef.querySelector('[data-testid="play-button"]');
+    const pauseButton = this.documentRef.querySelector('[data-testid="pause-button"]');
 
     if (playButton) playButton.style.display = 'none';
     if (pauseButton) pauseButton.style.display = 'inline-block';
-  }
+  };
 
-  function handlePauseAudio() {
-    const audioElement = document.getElementById('audio-element');
+  handlePauseAudio = () => {
+    const audioElement = this.documentRef.getElementById('audio-element');
     if (audioElement) {
       audioElement.pause();
     }
 
-    const playButton = document.querySelector('[data-testid="play-button"]');
-    const pauseButton = document.querySelector('[data-testid="pause-button"]');
+    const playButton = this.documentRef.querySelector('[data-testid="play-button"]');
+    const pauseButton = this.documentRef.querySelector('[data-testid="pause-button"]');
 
     if (playButton) playButton.style.display = 'inline-block';
     if (pauseButton) pauseButton.style.display = 'none';
-  }
+  };
 
-  function handleDownloadAudio() {
-    const currentSection = appState.generatedSections[appState.currentSectionIndex];
+  handleDownloadAudio = () => {
+    const currentSection = this.appState.generatedSections[this.appState.currentSectionIndex];
 
     if (!currentSection || !currentSection.blob) {
       alert('ダウンロードする音声がありません。');
       return;
     }
 
-    triggerBlobDownload(currentSection.blob, currentSection.fileName);
+    this.triggerBlobDownload(currentSection.blob, currentSection.fileName);
     console.log('音声をダウンロードしました:', currentSection.fileName);
-  }
+  };
 
-  function handleHistoryPlay(entryId) {
-    const record = appState.history.find((item) => item.id === entryId);
+  handleHistoryPlay = (entryId) => {
+    const record = this.appState.history.find((item) => item.id === entryId);
     if (!record) return;
 
-    const sections = getSectionsFromRecord(record);
+    const sections = this.getSectionsFromRecord(record);
     if (!sections.length) {
       alert('再生できるセクションが見つかりません。');
       return;
     }
 
-    appState.generatedSections = sections.map((section) => ({ ...section }));
-    appState.currentSectionIndex = 0;
-    appState.activeHistoryId = record.id;
-    showSectionPreview(appState.generatedSections[0], 1, appState.generatedSections.length);
-    if (!appState.generatedSections[0].blob) {
+    this.appState.generatedSections = sections.map((section) => ({ ...section }));
+    this.appState.currentSectionIndex = 0;
+    this.appState.activeHistoryId = record.id;
+    this.showSectionPreview(this.appState.generatedSections[0], 1, this.appState.generatedSections.length);
+    if (!this.appState.generatedSections[0].blob) {
       alert('この履歴には音声データが保存されていません。再生するには再生成を行ってください。');
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
+  };
 
-  function handleHistoryAudioDownload(entryId) {
-    const record = appState.history.find((item) => item.id === entryId);
+  handleHistoryAudioDownload = (entryId) => {
+    const record = this.appState.history.find((item) => item.id === entryId);
     if (!record) {
       alert('この履歴が見つかりません。');
       return;
     }
 
-    const sections = getSectionsFromRecord(record);
+    const sections = this.getSectionsFromRecord(record);
     const targetSection = sections.find((section) => section.blob);
     if (!targetSection) {
       alert('この履歴の音声データは現在のセッションではダウンロードできません。');
       return;
     }
 
-    triggerBlobDownload(targetSection.blob, targetSection.fileName || 'narration.wav');
-  }
+    this.triggerBlobDownload(targetSection.blob, targetSection.fileName || 'narration.wav');
+  };
 
-  async function handleRegenerateSection() {
-    if (!Array.isArray(appState.generatedSections) || appState.generatedSections.length === 0) {
+  handleRegenerateSection = async () => {
+    if (!Array.isArray(this.appState.generatedSections) || this.appState.generatedSections.length === 0) {
       alert('再生成できるセクションがありません。');
       return;
     }
 
-    const targetIndex = appState.currentSectionIndex;
-    const targetSection = appState.generatedSections[targetIndex];
+    const targetIndex = this.appState.currentSectionIndex;
+    const targetSection = this.appState.generatedSections[targetIndex];
     if (!targetSection) {
       alert('再生成対象のセクションが見つかりません。');
       return;
@@ -108,31 +126,26 @@ export function createAudioController({
     if (!confirmed) return;
 
     try {
-      setGeneratingState(true);
-      const speakerConfig = getSpeakerConfiguration();
-      const result = await generateAudioFromScript(targetSection.script, speakerConfig);
-      const duration = await getAudioDuration(result.blob);
-      const costInfo = calculateCostDetails(result.usage, result.script, duration, result.modelName);
-      const updatedRecord = createSectionRecord(result, duration, costInfo);
-      appState.generatedSections[targetIndex] = updatedRecord;
-      showSectionPreview(updatedRecord, targetIndex + 1, appState.generatedSections.length);
-      updateHistorySectionRecord(appState.activeHistoryId, targetIndex, updatedRecord);
-      refreshHistoryTable();
+      this.setGeneratingState(true);
+      const speakerConfig = this.getSpeakerConfiguration();
+      const result = await this.generateAudioFromScript(targetSection.script, speakerConfig);
+      const duration = await this.getAudioDuration(result.blob);
+      const costInfo = this.calculateCostDetails(result.usage, result.script, duration, result.modelName);
+      const updatedRecord = this.createSectionRecord(result, duration, costInfo);
+      this.appState.generatedSections[targetIndex] = updatedRecord;
+      this.showSectionPreview(updatedRecord, targetIndex + 1, this.appState.generatedSections.length);
+      this.updateHistorySectionRecord(this.appState.activeHistoryId, targetIndex, updatedRecord);
+      this.refreshHistoryTable();
       alert('セクションを再生成しました。');
     } catch (error) {
       console.error('セクションの再生成に失敗しました:', error);
       alert(`セクションの再生成に失敗しました: ${error.message || error}`);
     } finally {
-      setGeneratingState(false);
+      this.setGeneratingState(false);
     }
-  }
-
-  return {
-    handlePlayAudio,
-    handlePauseAudio,
-    handleDownloadAudio,
-    handleHistoryPlay,
-    handleHistoryAudioDownload,
-    handleRegenerateSection
   };
+}
+
+export function createAudioController(options) {
+  return new AudioController(options);
 }

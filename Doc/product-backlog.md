@@ -887,6 +887,13 @@ Joe: Let's start with the dashboard overview...
 - テストでは in-memory 実装/モックを注入し、副作用（fetch/localStorage/Audio）を切り離す
 - View クラスも同様に依存を注入し、DOM 取得/描画をモック可能にする
 
+**進捗メモ (2025-12-06)**:
+- Generation/Script/Speaker/Audio/APIKey をクラス化し、DI対応（`init/destroy`、document/サービス注入）を実施
+- StorageService/HistoryService/GeminiService をクラス化し、モック差し替え可能に
+- serviceRegistry を導入し、app エントリから依存注入を一元化
+- DI モックを用いたユニットテストを追加（history/sectionビュー、generation-controller、storage/historyサービス、api-keyコントローラー）
+- 残タスク: オーディオ副作用/フォーマッタ等のIF定義と、Playwrightモックスモーク（PBI-045側）整備
+
 ---
 
 #### PBI-045: DI 前提の自動テスト整備【優先度: 高】
@@ -939,6 +946,7 @@ Joe: Let's start with the dashboard overview...
 - PBI-024: ローディングインジケーター
 - PBI-043: クラスベースUIコントローラー移行計画
 - PBI-044: DI 化によるテスト容易性向上
+- PBI-045: DI 前提の自動テスト整備
 
 ### Could Have（あると良い）
 - PBI-020: 履歴削除機能
@@ -1034,6 +1042,7 @@ Joe: Let's start with the dashboard overview...
 - **PBI-019**: 履歴から全セクションを一括ダウンロードする仕組み、セッションを跨いだ Blob 永続化は未実装。
 - **PBI-043**: クラス化計画のうち init/destroy 対応は完了。残りは依存方向チェックリスト作成とスモークテスト結果の記録。
 - **PBI-044**: DI 化によるテスト容易性向上（インターフェース定義、サービス注入、モックテスト整備）が未着手。
+- **PBI-045**: DI 前提の自動テスト整備（モックサービス付きユニット、モック化Playwrightスモーク）が未完。
 - **PBI-020 以降**: 履歴削除/再実行、ヘルプ、設定画面、プロジェクト名設定など Epic C 以降の項目は未着手。
 
 ---

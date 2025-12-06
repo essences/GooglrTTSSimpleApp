@@ -13,26 +13,7 @@ import {
   getPendingConfirmAction
 } from './app/ui/dom-elements.js';
 import { renderHistoryTable, downloadHistoryDetails } from './app/ui/history-view.js';
-import {
-  validateApiKey,
-  setGeminiApiKey,
-  setGeminiModel
-} from './app/services/gemini-service.js';
-import {
-  loadStoredApiKey,
-  storeApiKey,
-  clearStoredApiKey,
-  loadSpeakerSettingsFromStorage,
-  saveSpeakerSettingsToStorage,
-  loadHistoryMetadata
-} from './app/services/storage-service.js';
-import { calculateCostDetails } from './app/services/cost-utils.js';
-import { getAudioDuration } from './app/services/audio-utils.js';
-import {
-  updateHistorySectionRecord,
-  createSectionRecord,
-  getSectionsFromRecord
-} from './app/services/history-service.js';
+import { defaultServiceRegistry } from './app/services/service-registry.js';
 import { showSectionPreview, showSectionByIndex } from './app/ui/section-preview.js';
 import { openConfirmDialog, closeConfirmDialog } from './app/ui/dialogs.js';
 import { createAudioController } from './app/controllers/audio-controller.js';
@@ -41,14 +22,25 @@ import { createScriptController } from './app/controllers/script-controller.js';
 import { createSpeakerController } from './app/controllers/speaker-controller.js';
 import { createGenerationController } from './app/controllers/generation-controller.js';
 
+const services = defaultServiceRegistry;
+const {
+  storageService,
+  historyService,
+  geminiService,
+  ttsClient,
+  costUtils,
+  audioUtils
+} = services;
+
 const speakerController = createSpeakerController({
   appState,
-  saveSpeakerSettingsToStorage
+  saveSpeakerSettingsToStorage: (speakers) => storageService.saveSpeakerSettingsToStorage(speakers)
 });
 
 const generationController = createGenerationController({
   appState,
-  getSpeakerConfiguration: speakerController.getSpeakerConfiguration
+  getSpeakerConfiguration: speakerController.getSpeakerConfiguration,
+  ttsService: ttsClient
 });
 
 const scriptController = createScriptController({
@@ -60,24 +52,24 @@ const audioController = createAudioController({
   appState,
   getSpeakerConfiguration: speakerController.getSpeakerConfiguration,
   generateAudioFromScript: generationController.generateAudioFromScript,
-  getAudioDuration,
-  calculateCostDetails,
-  createSectionRecord,
+  getAudioDuration: audioUtils.getAudioDuration,
+  calculateCostDetails: costUtils.calculateCostDetails,
+  createSectionRecord: historyService.createSectionRecord.bind(historyService),
   updateHistorySectionRecord: (historyId, sectionIndex, updatedRecord) =>
-    updateHistorySectionRecord(appState.history, historyId, sectionIndex, updatedRecord),
+    historyService.updateHistorySectionRecord(appState.history, historyId, sectionIndex, updatedRecord),
   showSectionPreview,
-  refreshHistoryTable: () => renderHistoryTable(appState.history, getSectionsFromRecord),
+  refreshHistoryTable: () => renderHistoryTable(appState.history, historyService.getSectionsFromRecord.bind(historyService)),
   setGeneratingState: generationController.setGeneratingState,
-  getSectionsFromRecord
+  getSectionsFromRecord: historyService.getSectionsFromRecord.bind(historyService)
 });
 
 const apiKeyController = createApiKeyController({
   appState,
-  validateApiKey,
-  storeApiKey,
-  clearStoredApiKey,
+  validateApiKey: (apiKey) => geminiService.validateApiKey(apiKey),
+  storeApiKey: (apiKey) => storageService.storeApiKey(apiKey),
+  clearStoredApiKey: () => storageService.clearStoredApiKey(),
   setAppStateApiKey,
-  setGeminiApiKey,
+  setGeminiApiKey: (apiKey) => geminiService.setApiKey(apiKey),
   showMainApp,
   showApiKeyModal,
   openConfirmDialog
@@ -88,23 +80,23 @@ function initApp() {
 
   cacheDomElements();
 
-  appState.speakers = loadSpeakerSettingsFromStorage();
+  appState.speakers = storageService.loadSpeakerSettingsFromStorage();
   speakerController.applySettingsToInputs();
 
-  const storedApiKey = loadStoredApiKey();
+  const storedApiKey = storageService.loadStoredApiKey();
   if (storedApiKey) {
     setAppStateApiKey(storedApiKey);
-    setGeminiApiKey(storedApiKey);
+    geminiService.setApiKey(storedApiKey);
     showMainApp();
   } else {
     showApiKeyModal();
   }
 
-  appState.history = loadHistoryMetadata();
+  appState.history = storageService.loadHistoryMetadata();
 
   setupEventListeners();
 
-  renderHistoryTable(appState.history, getSectionsFromRecord);
+  renderHistoryTable(appState.history, historyService.getSectionsFromRecord.bind(historyService));
   generationController.updateModelCostDisplay();
   scriptController.updateCharCount();
 

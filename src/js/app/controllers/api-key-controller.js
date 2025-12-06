@@ -5,172 +5,191 @@ function maskApiKey(apiKey) {
   return `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`;
 }
 
-function showMessage(elementId, message) {
-  const element = document.querySelector(`[data-testid="${elementId}"]`);
-  if (element) {
-    element.textContent = message;
-    element.style.display = 'block';
+export class ApiKeyController {
+  constructor({
+    appState,
+    validateApiKey,
+    storeApiKey,
+    clearStoredApiKey,
+    setAppStateApiKey,
+    setGeminiApiKey,
+    showMainApp,
+    showApiKeyModal,
+    openConfirmDialog,
+    documentRef = document,
+    elementsRef = elements
+  }) {
+    this.appState = appState;
+    this.validateApiKey = validateApiKey;
+    this.storeApiKey = storeApiKey;
+    this.clearStoredApiKey = clearStoredApiKey;
+    this.setAppStateApiKey = setAppStateApiKey;
+    this.setGeminiApiKey = setGeminiApiKey;
+    this.showMainApp = showMainApp;
+    this.showApiKeyModal = showApiKeyModal;
+    this.openConfirmDialog = openConfirmDialog;
+    this.documentRef = documentRef;
+    this.elements = elementsRef;
   }
-}
 
-function hideAllMessages() {
-  ['validation-error', 'error-message', 'success-message'].forEach((id) => {
-    const element = document.querySelector(`[data-testid="${id}"]`);
+  showMessage = (elementId, message) => {
+    const element = this.documentRef.querySelector(`[data-testid="${elementId}"]`);
     if (element) {
-      element.style.display = 'none';
-      element.textContent = '';
+      element.textContent = message;
+      element.style.display = 'block';
     }
-  });
-}
+  };
 
-function showLoading(show) {
-  const loadingElement = document.querySelector('[data-testid="loading"]');
-  if (loadingElement) {
-    loadingElement.style.display = show ? 'flex' : 'none';
-  }
+  hideAllMessages = () => {
+    ['validation-error', 'error-message', 'success-message'].forEach((id) => {
+      const element = this.documentRef.querySelector(`[data-testid="${id}"]`);
+      if (element) {
+        element.style.display = 'none';
+        element.textContent = '';
+      }
+    });
+  };
 
-  if (elements.saveApiKeyButton) {
-    elements.saveApiKeyButton.disabled = show;
-  }
-}
-
-function showSettingsFeedback(message, isSuccess) {
-  if (!elements.testResultMessage) return;
-  elements.testResultMessage.textContent = message;
-  elements.testResultMessage.style.display = 'block';
-  elements.testResultMessage.style.color = isSuccess ? '#15803d' : '#b91c1c';
-}
-
-function hideSettingsFeedback() {
-  if (!elements.testResultMessage) return;
-  elements.testResultMessage.style.display = 'none';
-  elements.testResultMessage.textContent = '';
-}
-
-function setTestingState(isTesting) {
-  if (elements.testingIndicator) {
-    elements.testingIndicator.style.display = isTesting ? 'block' : 'none';
-  }
-  if (elements.testApiKeyButton) {
-    elements.testApiKeyButton.disabled = isTesting;
-  }
-}
-
-function updateApiKeyDisplays(appState) {
-  const apiKeyDisplays = document.querySelectorAll('[data-testid="api-key-display"]');
-  apiKeyDisplays.forEach((display) => {
-    if (display.classList.contains('api-key-status')) {
-      display.value = appState.apiKey ? 'Connected' : 'Not connected';
-    } else {
-      display.value = appState.apiKey ? maskApiKey(appState.apiKey) : '未設定';
+  showLoading = (show) => {
+    const loadingElement = this.documentRef.querySelector('[data-testid="loading"]');
+    if (loadingElement) {
+      loadingElement.style.display = show ? 'flex' : 'none';
     }
-  });
-}
 
-export function createApiKeyController({
-  appState,
-  validateApiKey,
-  storeApiKey,
-  clearStoredApiKey,
-  setAppStateApiKey,
-  setGeminiApiKey,
-  showMainApp,
-  showApiKeyModal,
-  openConfirmDialog
-}) {
-  async function handleSaveApiKey() {
-    const apiKey = elements.apiKeyInput.value.trim();
+    if (this.elements.saveApiKeyButton) {
+      this.elements.saveApiKeyButton.disabled = show;
+    }
+  };
 
-    hideAllMessages();
+  showSettingsFeedback = (message, isSuccess) => {
+    if (!this.elements.testResultMessage) return;
+    this.elements.testResultMessage.textContent = message;
+    this.elements.testResultMessage.style.display = 'block';
+    this.elements.testResultMessage.style.color = isSuccess ? '#15803d' : '#b91c1c';
+  };
+
+  hideSettingsFeedback = () => {
+    if (!this.elements.testResultMessage) return;
+    this.elements.testResultMessage.style.display = 'none';
+    this.elements.testResultMessage.textContent = '';
+  };
+
+  setTestingState = (isTesting) => {
+    if (this.elements.testingIndicator) {
+      this.elements.testingIndicator.style.display = isTesting ? 'block' : 'none';
+    }
+    if (this.elements.testApiKeyButton) {
+      this.elements.testApiKeyButton.disabled = isTesting;
+    }
+  };
+
+  updateApiKeyDisplays = () => {
+    const apiKeyDisplays = this.documentRef.querySelectorAll('[data-testid="api-key-display"]');
+    apiKeyDisplays.forEach((display) => {
+      if (display.classList.contains('api-key-status')) {
+        display.value = this.appState.apiKey ? 'Connected' : 'Not connected';
+      } else {
+        display.value = this.appState.apiKey ? maskApiKey(this.appState.apiKey) : '未設定';
+      }
+    });
+  };
+
+  handleSaveApiKey = async () => {
+    const apiKey = this.elements.apiKeyInput.value.trim();
+
+    this.hideAllMessages();
 
     if (!apiKey) {
-      showMessage('validation-error', 'APIキーを入力してください');
+      this.showMessage('validation-error', 'APIキーを入力してください');
       return;
     }
 
     if (apiKey.length < 10) {
-      showMessage('validation-error', 'APIキーの形式が正しくありません');
+      this.showMessage('validation-error', 'APIキーの形式が正しくありません');
       return;
     }
 
-    showLoading(true);
+    this.showLoading(true);
 
     try {
-      await validateApiKey(apiKey);
+      await this.validateApiKey(apiKey);
 
-      storeApiKey(apiKey);
-      setAppStateApiKey(apiKey);
-      setGeminiApiKey(apiKey);
+      this.storeApiKey(apiKey);
+      this.setAppStateApiKey(apiKey);
+      this.setGeminiApiKey(apiKey);
 
-      showMessage('success-message', 'APIキーが保存されました');
+      this.showMessage('success-message', 'APIキーが保存されました');
 
       setTimeout(() => {
-        showMainApp();
+        this.showMainApp();
       }, 2000);
     } catch (error) {
       console.error('APIキー検証エラー:', error);
-      showMessage('error-message', `エラーが発生しました: ${error.message}`);
+      this.showMessage('error-message', `エラーが発生しました: ${error.message}`);
     } finally {
-      showLoading(false);
+      this.showLoading(false);
     }
-  }
+  };
 
-  async function handleTestApiKey() {
-    hideSettingsFeedback();
+  handleTestApiKey = async () => {
+    this.hideSettingsFeedback();
 
-    if (!appState.apiKey) {
-      showSettingsFeedback('APIキーが設定されていません。', false);
+    if (!this.appState.apiKey) {
+      this.showSettingsFeedback('APIキーが設定されていません。', false);
       return;
     }
 
-    setTestingState(true);
+    this.setTestingState(true);
 
     try {
-      await validateApiKey(appState.apiKey);
-      showSettingsFeedback('APIキーは有効です。', true);
+      await this.validateApiKey(this.appState.apiKey);
+      this.showSettingsFeedback('APIキーは有効です。', true);
     } catch (error) {
       console.error('APIキーのテストに失敗しました:', error);
-      showSettingsFeedback(error.message || 'APIキーのテストに失敗しました。', false);
+      this.showSettingsFeedback(error.message || 'APIキーのテストに失敗しました。', false);
     } finally {
-      setTestingState(false);
+      this.setTestingState(false);
     }
-  }
+  };
 
-  function deleteStoredApiKey() {
-    clearStoredApiKey();
-    setAppStateApiKey(null);
-    setGeminiApiKey(null);
-    if (elements.apiKeyInput) {
-      elements.apiKeyInput.value = '';
+  deleteStoredApiKey = () => {
+    this.clearStoredApiKey();
+    this.setAppStateApiKey(null);
+    this.setGeminiApiKey(null);
+    if (this.elements.apiKeyInput) {
+      this.elements.apiKeyInput.value = '';
     }
-    updateApiKeyDisplays(appState);
-    hideSettingsFeedback();
-    if (elements.settingsModal) {
-      elements.settingsModal.style.display = 'none';
+    this.updateApiKeyDisplays();
+    this.hideSettingsFeedback();
+    if (this.elements.settingsModal) {
+      this.elements.settingsModal.style.display = 'none';
     }
-    showApiKeyModal();
-    showMessage('success-message', 'APIキーを削除しました。新しいキーを入力してください。');
-  }
+    this.showApiKeyModal();
+    this.showMessage('success-message', 'APIキーを削除しました。新しいキーを入力してください。');
+  };
 
-  function handleDeleteApiKeyRequest() {
-    hideSettingsFeedback();
+  handleDeleteApiKeyRequest = () => {
+    this.hideSettingsFeedback();
 
-    if (!appState.apiKey) {
-      showSettingsFeedback('削除するAPIキーがありません。', false);
+    if (!this.appState.apiKey) {
+      this.showSettingsFeedback('削除するAPIキーがありません。', false);
       return;
     }
 
-    openConfirmDialog('保存されたAPIキーを削除しますか？', deleteStoredApiKey, {
+    this.openConfirmDialog('保存されたAPIキーを削除しますか？', this.deleteStoredApiKey, {
       confirmText: '削除',
       variant: 'danger'
     });
-  }
+  };
+}
 
+export function createApiKeyController(options) {
+  const controller = new ApiKeyController(options);
   return {
-    handleSaveApiKey,
-    handleTestApiKey,
-    handleDeleteApiKeyRequest,
-    updateApiKeyDisplays: () => updateApiKeyDisplays(appState),
-    showMessage
+    handleSaveApiKey: controller.handleSaveApiKey,
+    handleTestApiKey: controller.handleTestApiKey,
+    handleDeleteApiKeyRequest: controller.handleDeleteApiKeyRequest,
+    updateApiKeyDisplays: controller.updateApiKeyDisplays,
+    showMessage: controller.showMessage
   };
 }

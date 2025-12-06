@@ -7,32 +7,47 @@ import {
   PRO_TTS_MODELS,
   USD_TO_JPY
 } from '../config/constants.js';
-import {
-  splitScriptIntoSections,
-  parseSpeakerSegments,
-  assignSpeakerKeysToSegments,
-  normalizeSpeakersRecord
-} from '../services/script-utils.js';
-import { calculateCostDetails } from '../services/cost-utils.js';
-import { getAudioDuration, base64ToBlob } from '../services/audio-utils.js';
 import { delay } from '../services/async-utils.js';
 import { getGeminiClient } from '../services/gemini-service.js';
-import {
-  addHistoryEntry,
-  createHistoryRunRecord,
-  createSectionRecord,
-  getSectionsFromRecord
-} from '../services/history-service.js';
-import { renderHistoryTable } from '../ui/history-view.js';
-import { showSectionPreview, showGenerationCompleteMessage } from '../ui/section-preview.js';
-import { elements } from '../ui/dom-elements.js';
+import { elements as defaultElements } from '../ui/dom-elements.js';
+import { base64ToBlob as defaultBase64ToBlob, getAudioDuration as defaultGetAudioDuration } from '../services/audio-utils.js';
+import { splitScriptIntoSections as defaultSplitSections, parseSpeakerSegments as defaultParseSegments, assignSpeakerKeysToSegments as defaultAssignSpeakerKeysToSegments, normalizeSpeakersRecord as defaultNormalizeSpeakersRecord } from '../services/script-utils.js';
+import { calculateCostDetails as defaultCalculateCostDetails } from '../services/cost-utils.js';
+import { renderHistoryTable as defaultRenderHistoryTable } from '../ui/history-view.js';
+import { showSectionPreview as defaultShowSectionPreview, showGenerationCompleteMessage as defaultShowGenerationCompleteMessage } from '../ui/section-preview.js';
+import { HistoryService as DefaultHistoryService } from '../services/history-service.js';
 
 export class GenerationController {
-  constructor({ appState, getSpeakerConfiguration }) {
+  constructor({
+    appState,
+    getSpeakerConfiguration,
+    ttsService = getGeminiClient(),
+    scriptUtils = {
+      splitScriptIntoSections: defaultSplitSections,
+      parseSpeakerSegments: defaultParseSegments,
+      assignSpeakerKeysToSegments: defaultAssignSpeakerKeysToSegments,
+      normalizeSpeakersRecord: defaultNormalizeSpeakersRecord
+    },
+    costUtils = { calculateCostDetails: defaultCalculateCostDetails },
+    audioUtils = { getAudioDuration: defaultGetAudioDuration, base64ToBlob: defaultBase64ToBlob },
+    historyService = new DefaultHistoryService(),
+    uiHandlers = {
+      renderHistoryTable: defaultRenderHistoryTable,
+      showSectionPreview: defaultShowSectionPreview,
+      showGenerationCompleteMessage: defaultShowGenerationCompleteMessage,
+      elements: defaultElements
+    }
+  }) {
     this.appState = appState;
     this.getSpeakerConfiguration = getSpeakerConfiguration;
-    this.geminiClient = getGeminiClient();
+    this.ttsService = ttsService;
     this.listeners = [];
+    this.scriptUtils = scriptUtils;
+    this.costUtils = costUtils;
+    this.audioUtils = audioUtils;
+    this.historyService = historyService;
+    this.uiHandlers = uiHandlers;
+    this.elements = uiHandlers.elements;
   }
 
   addListener = (element, event, handler) => {
@@ -66,7 +81,7 @@ export class GenerationController {
   };
 
   setProgressStatusText = (text = '', { isError = false } = {}) => {
-    const statusElement = elements.progressStatus;
+    const statusElement = this.elements.progressStatus;
     if (!statusElement) return;
 
     if (text) {
@@ -81,9 +96,9 @@ export class GenerationController {
   };
 
   setGeneratingState = (isGenerating) => {
-    if (elements.generateButton) {
-      elements.generateButton.disabled = isGenerating;
-      elements.generateButton.textContent = isGenerating ? '生成中...' : '音声を生成する';
+    if (this.elements.generateButton) {
+      this.elements.generateButton.disabled = isGenerating;
+      this.elements.generateButton.textContent = isGenerating ? '生成中...' : '音声を生成する';
     }
 
     const progressBar = document.querySelector('[data-testid="progress-bar"]');
@@ -95,13 +110,13 @@ export class GenerationController {
       this.updateProgressIndicator(0);
     }
 
-    if (elements.scriptTextarea) {
-      elements.scriptTextarea.disabled = isGenerating;
+    if (this.elements.scriptTextarea) {
+      this.elements.scriptTextarea.disabled = isGenerating;
     }
   };
 
   validateGenerationInputs = () => {
-    const script = elements.scriptTextarea.value.trim();
+    const script = this.elements.scriptTextarea.value.trim();
 
     if (!script) {
       return '原稿を入力してください。';
@@ -208,7 +223,7 @@ export class GenerationController {
       throw new Error(data?.error || `Pro TTS サーバーエラー (${response.status})`);
     }
 
-    const audioBlob = base64ToBlob(data.audioBase64, data.mimeType || 'audio/wav');
+    const audioBlob = this.audioUtils.base64ToBlob(data.audioBase64, data.mimeType || 'audio/wav');
     return {
       blob: audioBlob,
       mimeType: data.mimeType || 'audio/wav',
@@ -225,8 +240,8 @@ export class GenerationController {
       return this.generateAudioViaServer(script, speakerConfig);
     }
 
-    const segments = parseSpeakerSegments(script);
-    const keyedSegments = assignSpeakerKeysToSegments(segments, speakerConfig);
+    const segments = this.scriptUtils.parseSpeakerSegments(script);
+    const keyedSegments = this.scriptUtils.assignSpeakerKeysToSegments(segments, speakerConfig);
     const speakerANameRaw = speakerConfig.speakerA?.name?.trim();
     const speakerBNameRaw = speakerConfig.speakerB?.name?.trim();
     const hasSpeakerA = keyedSegments.some((seg) => seg.speakerKey === 'speaker_a');
@@ -252,7 +267,7 @@ export class GenerationController {
         })
         .join('\n');
 
-      const result = await this.geminiClient.generateMultiSpeaker({
+      const result = await this.ttsService.generateMultiSpeaker({
         prompt: multiSpeakerScript,
         speakerConfigs: [
           {
@@ -270,7 +285,7 @@ export class GenerationController {
       usageMetadata = result.usage;
     } else {
       const voiceName = speakerConfig.speakerA.voice || 'Kore';
-      const result = await this.geminiClient.generateSingleSpeaker({
+      const result = await this.ttsService.generateSingleSpeaker({
         text: script,
         voiceName,
         generationConfig: {
@@ -287,7 +302,7 @@ export class GenerationController {
       mimeType,
       script,
       timestamp: new Date().toISOString(),
-      speakers: normalizeSpeakersRecord(speakerConfig),
+      speakers: this.scriptUtils.normalizeSpeakersRecord(speakerConfig),
       modelName: this.appState.settings.selectedModel,
       usage: usageMetadata
     };
@@ -308,9 +323,14 @@ export class GenerationController {
       try {
         this.setProgressStatusText(`セクション ${attemptLabel} を生成中...`);
         const result = await this.generateAudioFromScript(sectionText, speakerConfig);
-        const duration = await getAudioDuration(result.blob);
-        const costInfo = calculateCostDetails(result.usage, result.script, duration, result.modelName);
-        return createSectionRecord(result, duration, costInfo);
+        const duration = await this.audioUtils.getAudioDuration(result.blob);
+        const costInfo = this.costUtils.calculateCostDetails(
+          result.usage,
+          result.script,
+          duration,
+          result.modelName
+        );
+        return this.historyService.createSectionRecord(result, duration, costInfo);
       } catch (error) {
         lastError = error;
         attempt += 1;
@@ -346,17 +366,20 @@ export class GenerationController {
     this.appState.generatedSections = sectionRecords;
     this.appState.currentSectionIndex = 0;
 
-    showSectionPreview(sectionRecords[0], 1, sectionRecords.length);
+    this.uiHandlers.showSectionPreview(sectionRecords[0], 1, sectionRecords.length);
 
-    const historyRecord = createHistoryRunRecord(
+    const historyRecord = this.historyService.createHistoryRunRecord(
       sectionRecords,
       fullScript,
       this.appState.settings.selectedModel
     );
     this.appState.activeHistoryId = historyRecord.id;
-    addHistoryEntry(this.appState.history, historyRecord);
-    renderHistoryTable(this.appState.history, getSectionsFromRecord);
-    showGenerationCompleteMessage();
+    this.historyService.addHistoryEntry(this.appState.history, historyRecord);
+    this.uiHandlers.renderHistoryTable(
+      this.appState.history,
+      this.historyService.getSectionsFromRecord.bind(this.historyService)
+    );
+    this.uiHandlers.showGenerationCompleteMessage();
   };
 
   handleGenerateAudio = async () => {
@@ -372,7 +395,7 @@ export class GenerationController {
       const speakerConfig = this.getSpeakerConfiguration();
       const script = this.appState.currentScript;
 
-      const sectionsToGenerate = splitScriptIntoSections(script);
+      const sectionsToGenerate = this.scriptUtils.splitScriptIntoSections(script);
       if (sectionsToGenerate.length === 0) {
         alert('生成対象の原稿が見つかりません。');
         return;
@@ -436,7 +459,7 @@ export class GenerationController {
     }
 
     try {
-      const result = await this.geminiClient.generateSingleSpeaker({
+      const result = await this.ttsService.generateSingleSpeaker({
         text: VOICE_PREVIEW_TEXT,
         voiceName: selectedVoice,
         languageCode: 'ja-JP'

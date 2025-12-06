@@ -13,13 +13,15 @@
     "test:debug": "playwright test --debug",
     "test:smoke": "playwright test regression-smoke",
     "test:api-key": "playwright test api-key-management",
+    "test:unit": "node tests/ui/history-view.unit.js && node tests/ui/section-preview.unit.js && node tests/services/generation-controller.unit.js && node tests/services/storage-service.unit.js && node tests/services/history-service.unit.js",
     "test:report": "playwright show-report"
   },
   "keywords": ["tts", "gemini", "audio", "narration"],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@playwright/test": "^1.56.1"
+    "@playwright/test": "^1.56.1",
+    "jsdom": "^24.1.0"
   },
   "dependencies": {
     "@google/generative-ai": "^0.11.0",
