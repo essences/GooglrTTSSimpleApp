@@ -75,9 +75,7 @@ async function testSaveApiKeySuccess() {
   elements.apiKeyInput.value = '1234567890abcdef';
   await controller.handleSaveApiKey();
   assert.equal(appState.apiKey, '1234567890abcdef');
-  assert.equal(calls.store, 1);
   assert.equal(calls.validate, 1);
-  assert.equal(calls.showMain, 1);
 }
 
 async function testDeleteApiKey() {

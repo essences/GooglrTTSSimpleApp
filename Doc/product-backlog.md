@@ -268,10 +268,10 @@ Joe: Let's start with the dashboard overview...
 
 **受入基準**:
 - [x] 生成開始時に進捗バーが表示される
-- [ ] 進捗率（%）がバーと数値で表示される
+- [x] 進捗率（%）がバーと数値で表示される
 - [x] セクションごとに進捗が更新される
 - [x] 生成完了時に100%になる
-- [ ] エラー時は進捗バーが赤色になる
+- [x] エラー時は進捗バーが赤色になる
 
 **見積もり**: 3 SP
 
@@ -685,9 +685,9 @@ Joe: Let's start with the dashboard overview...
 **ストーリー**: ユーザーとして、生成進捗をパーセント表示と色で直感的に把握したい
 
 **受入基準**:
-- [ ] 進捗バーに数値（例: 45%）が表示される
-- [ ] エラー発生時に進捗バーとステータス文が赤系に変化する
-- [ ] エラー後に再実行するとバーがリセットされる
+- [x] 進捗バーに数値（例: 45%）が表示される
+- [x] エラー発生時に進捗バーとステータス文が赤系に変化する
+- [x] エラー後に再実行するとバーがリセットされる
 - [ ] ステータスメッセージの履歴（ログ）が確認できる
 
 **見積もり**: 2 SP
@@ -876,10 +876,10 @@ Joe: Let's start with the dashboard overview...
 **ストーリー**: 開発者として、コントローラーとサービスを依存性注入で差し替え可能にし、ユニット/スモークテストを容易にしたい
 
 **受入基準**:
-- [ ] TTS/ストレージ/履歴計算/フォーマッタ等の主要サービスに薄いインターフェース（型定義オブジェクト）が定義されている
-- [ ] コントローラーはサービスをコンストラクタ引数経由で受け取り、直接 import を行わない（デフォルト実装は app エントリで注入）
-- [ ] テスト用にモックサービスを注入したユニットテスト/Playwright スモークの最小ケースが用意される
-- [ ] DI 設計を `controller-architecture.md` かテストガイドに記載し、差し替え手順が明文化されている
+- [x] TTS/ストレージ/履歴計算/フォーマッタ等の主要サービスに薄いインターフェース（型定義オブジェクト）が定義されている
+- [x] コントローラーはサービスをコンストラクタ引数経由で受け取り、直接 import を行わない（デフォルト実装は app エントリで注入）
+- [x] テスト用にモックサービスを注入したユニットテスト/Playwright スモークの最小ケースが用意される（ユニットテストでモック注入済み）
+- [x] DI 設計を `controller-architecture.md` かテストガイドに記載し、差し替え手順が明文化されている
 
 **技術メモ**:
 - 例: `ITtsService { generateSingleSpeaker, generateMultiSpeaker }`, `IStorageService { load, save }`, `IHistoryService { createRun, updateSection }`
@@ -891,8 +891,9 @@ Joe: Let's start with the dashboard overview...
 - Generation/Script/Speaker/Audio/APIKey をクラス化し、DI対応（`init/destroy`、document/サービス注入）を実施
 - StorageService/HistoryService/GeminiService をクラス化し、モック差し替え可能に
 - serviceRegistry を導入し、app エントリから依存注入を一元化
-- DI モックを用いたユニットテストを追加（history/sectionビュー、generation-controller、storage/historyサービス、api-keyコントローラー）
-- 残タスク: オーディオ副作用/フォーマッタ等のIF定義と、Playwrightモックスモーク（PBI-045側）整備
+- DI モックを用いたユニットテストを追加（history/sectionビュー、generation-controller、storage/historyサービス、api-keyコントローラー、audioコントローラー）
+- サービスインターフェース指針を `Doc/service-interfaces.md` に明文化
+- 残タスク: Playwright モック化スモークは PBI-045 側で対応
 
 ---
 
@@ -900,10 +901,16 @@ Joe: Let's start with the dashboard overview...
 **ストーリー**: QA/開発者として、DI で差し替えたモックサービスを用いて、安定した自動テスト（ユニット/ビュー/スモーク）を追加したい
 
 **受入基準**:
-- [ ] Generation/Script/Speaker/APIKey コントローラーにモックサービスを注入したユニットテストが追加され、主要ハンドラの状態遷移と表示メッセージを検証できる
-- [ ] HistoryView/SectionPreview などのビューを jsdom 相当でレンダリングし、UI差分を検証するビュー単体テストがある
-- [ ] Playwright スモークをモックTTS/ストレージで安定化させたシナリオ（生成→再生→DL→履歴再生）が追加され、CI で再利用可能になっている
-- [ ] テスト実行手順とモック差し替え方法がテストガイド（`controller-architecture.md` か `TESTING.md`）に追記されている
+- [x] Generation/Script/Speaker/APIKey コントローラーにモックサービスを注入したユニットテストが追加され、主要ハンドラの状態遷移と表示メッセージを検証できる
+- [x] HistoryView/SectionPreview などのビューを jsdom 相当でレンダリングし、UI差分を検証するビュー単体テストがある
+- [x] Playwright スモークをモックTTS/ストレージで安定化させたシナリオ（生成→再生→DL→履歴再生）が追加され、CI で再利用可能になっている（`MOCK_E2E=1` で有効化するモック煙テストを追加）
+- [x] テスト実行手順とモック差し替え方法がテストガイド（`controller-architecture.md` か `TESTING.md`）に追記されている
+
+**進捗メモ (2025-12-06)**:
+- コントローラー（Generation/Script/Speaker/Audio/APIKey）とビュー（HistoryView/SectionPreview）のモックユニットテストを追加
+- ストレージ/履歴サービスのモックユニットを追加
+- `window.__MOCK_TTS__` で切り替えられるモックTTSと、`MOCK_E2E=1` で実行する Playwright モック煙テスト（生成→再生→DL→履歴再生）を追加
+- テストガイドにモック煙テストの実行手順を追記 (`TESTING.md`)
 
 **技術メモ**:
 - コントローラーテスト: fetch/Audio/localStorage をモック化、DOMは jsdom で生成。`init()` 呼び出し→イベントトリガー→state/UI検証。
@@ -1041,8 +1048,8 @@ Joe: Let's start with the dashboard overview...
 - **PBI-017**: 履歴件数の上限設定・古い履歴の削除は未導入。
 - **PBI-019**: 履歴から全セクションを一括ダウンロードする仕組み、セッションを跨いだ Blob 永続化は未実装。
 - **PBI-043**: クラス化計画のうち init/destroy 対応は完了。残りは依存方向チェックリスト作成とスモークテスト結果の記録。
-- **PBI-044**: DI 化によるテスト容易性向上（インターフェース定義、サービス注入、モックテスト整備）が未着手。
 - **PBI-045**: DI 前提の自動テスト整備（モックサービス付きユニット、モック化Playwrightスモーク）が未完。
+- **PBI-033**: ステータスメッセージの履歴（ログ）表示のみ未対応。
 - **PBI-020 以降**: 履歴削除/再実行、ヘルプ、設定画面、プロジェクト名設定など Epic C 以降の項目は未着手。
 
 ---

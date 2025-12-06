@@ -13,7 +13,8 @@
     "test:debug": "playwright test --debug",
     "test:smoke": "playwright test regression-smoke",
     "test:api-key": "playwright test api-key-management",
-    "test:unit": "node tests/ui/history-view.unit.js && node tests/ui/section-preview.unit.js && node tests/services/generation-controller.unit.js && node tests/services/storage-service.unit.js && node tests/services/history-service.unit.js",
+    "test:unit": "node tests/ui/history-view.unit.js && node tests/ui/section-preview.unit.js && node tests/ui/generation-settings.unit.js && node tests/services/generation-controller.unit.js && node tests/services/storage-service.unit.js && node tests/services/history-service.unit.js && node tests/controllers/api-key-controller.unit.js && node tests/controllers/audio-controller.unit.js && node tests/controllers/script-controller.unit.js && node tests/controllers/speaker-controller.unit.js && node tests/controllers/generation-controller.ui.unit.js",
+    "test:mock-e2e": "MOCK_E2E=1 playwright test tests/e2e/mock-smoke.spec.js",
     "test:report": "playwright show-report"
   },
   "keywords": ["tts", "gemini", "audio", "narration"],

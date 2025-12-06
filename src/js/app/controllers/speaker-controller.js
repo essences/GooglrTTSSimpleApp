@@ -1,8 +1,9 @@
 export class SpeakerController {
-  constructor({ appState, saveSpeakerSettingsToStorage }) {
+  constructor({ appState, saveSpeakerSettingsToStorage, documentRef = typeof document !== 'undefined' ? document : null }) {
     this.appState = appState;
     this.saveSpeakerSettingsToStorage = saveSpeakerSettingsToStorage;
     this.listeners = [];
+    this.documentRef = documentRef;
   }
 
   addListener = (element, event, handler) => {
@@ -24,13 +25,13 @@ export class SpeakerController {
   };
 
   getSpeakerConfiguration = () => {
-    const speakerAName = document.getElementById('speaker-a-name').value.trim();
-    const speakerAVoice = document.getElementById('speaker-a-voice').value;
-    const speakerAStyle = document.getElementById('speaker-a-style').value.trim();
+    const speakerAName = this.documentRef.getElementById('speaker-a-name').value.trim();
+    const speakerAVoice = this.documentRef.getElementById('speaker-a-voice').value;
+    const speakerAStyle = this.documentRef.getElementById('speaker-a-style').value.trim();
 
-    const speakerBName = document.getElementById('speaker-b-name').value.trim();
-    const speakerBVoice = document.getElementById('speaker-b-voice').value;
-    const speakerBStyle = document.getElementById('speaker-b-style').value.trim();
+    const speakerBName = this.documentRef.getElementById('speaker-b-name').value.trim();
+    const speakerBVoice = this.documentRef.getElementById('speaker-b-voice').value;
+    const speakerBStyle = this.documentRef.getElementById('speaker-b-style').value.trim();
 
     this.appState.speakers.a = {
       name: speakerAName,
@@ -51,12 +52,12 @@ export class SpeakerController {
   };
 
   applySettingsToInputs = () => {
-    const aName = document.getElementById('speaker-a-name');
-    const aVoice = document.getElementById('speaker-a-voice');
-    const aStyle = document.getElementById('speaker-a-style');
-    const bName = document.getElementById('speaker-b-name');
-    const bVoice = document.getElementById('speaker-b-voice');
-    const bStyle = document.getElementById('speaker-b-style');
+    const aName = this.documentRef.getElementById('speaker-a-name');
+    const aVoice = this.documentRef.getElementById('speaker-a-voice');
+    const aStyle = this.documentRef.getElementById('speaker-a-style');
+    const bName = this.documentRef.getElementById('speaker-b-name');
+    const bVoice = this.documentRef.getElementById('speaker-b-voice');
+    const bStyle = this.documentRef.getElementById('speaker-b-style');
 
     if (aName) aName.value = this.appState.speakers.a.name;
     if (aVoice) aVoice.value = this.appState.speakers.a.voice;
@@ -81,7 +82,7 @@ export class SpeakerController {
     ];
 
     mappings.forEach(({ id, key, field, event }) => {
-      const element = document.getElementById(id);
+      const element = this.documentRef.getElementById(id);
       this.addListener(element, event, () => {
         const value = field === 'voice' ? element.value : element.value.trim();
         this.appState.speakers[key][field] = value;

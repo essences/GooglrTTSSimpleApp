@@ -35,7 +35,8 @@ export class GenerationController {
       renderHistoryTable: defaultRenderHistoryTable,
       showSectionPreview: defaultShowSectionPreview,
       showGenerationCompleteMessage: defaultShowGenerationCompleteMessage,
-      elements: defaultElements
+      elements: defaultElements,
+      documentRef: typeof document !== 'undefined' ? document : null
     }
   }) {
     this.appState = appState;
@@ -48,6 +49,10 @@ export class GenerationController {
     this.historyService = historyService;
     this.uiHandlers = uiHandlers;
     this.elements = uiHandlers.elements;
+    this.documentRef = uiHandlers.documentRef;
+    if (!this.elements.progressPercent && this.documentRef) {
+      this.elements.progressPercent = this.documentRef.getElementById('progress-percent');
+    }
   }
 
   addListener = (element, event, handler) => {
@@ -56,11 +61,20 @@ export class GenerationController {
     this.listeners.push({ element, event, handler });
   };
 
-  init = () => {
-    this.addListener(elements.generateButton, 'click', this.handleGenerateAudio);
+  #getDocument() {
+    return (
+      this.documentRef ||
+      this.elements?.progressStatus?.ownerDocument ||
+      (typeof document !== 'undefined' ? document : null)
+    );
+  }
 
-    const previewVoiceAButton = document.querySelector('[data-testid="preview-voice-a"]');
-    const previewVoiceBButton = document.querySelector('[data-testid="preview-voice-b"]');
+  init = () => {
+    this.addListener(this.elements.generateButton, 'click', this.handleGenerateAudio);
+
+    const doc = this.#getDocument();
+    const previewVoiceAButton = doc?.querySelector('[data-testid="preview-voice-a"]');
+    const previewVoiceBButton = doc?.querySelector('[data-testid="preview-voice-b"]');
     this.addListener(previewVoiceAButton, 'click', () => this.handlePreviewVoice('a'));
     this.addListener(previewVoiceBButton, 'click', () => this.handlePreviewVoice('b'));
   };
@@ -73,15 +87,25 @@ export class GenerationController {
   };
 
   updateProgressIndicator = (percent) => {
-    const fill = document.getElementById('progress-bar-fill');
+    const doc = this.#getDocument();
+    const fill = doc?.getElementById('progress-bar-fill');
+    let percentLabel = this.elements.progressPercent || doc?.getElementById('progress-percent');
+    if (!this.elements.progressPercent && percentLabel) {
+      this.elements.progressPercent = percentLabel;
+    }
     if (fill) {
       const clamped = Math.max(0, Math.min(100, percent || 0));
       fill.style.width = `${clamped}%`;
+      if (percentLabel) {
+        percentLabel.textContent = `${clamped}%`;
+      }
     }
   };
 
   setProgressStatusText = (text = '', { isError = false } = {}) => {
     const statusElement = this.elements.progressStatus;
+    const doc = this.#getDocument();
+    const progressBar = doc?.querySelector('[data-testid="progress-bar"]');
     if (!statusElement) return;
 
     if (text) {
@@ -93,6 +117,10 @@ export class GenerationController {
       statusElement.style.display = 'none';
       statusElement.classList.remove('error');
     }
+
+    if (progressBar) {
+      progressBar.classList.toggle('error', Boolean(isError));
+    }
   };
 
   setGeneratingState = (isGenerating) => {
@@ -101,13 +129,17 @@ export class GenerationController {
       this.elements.generateButton.textContent = isGenerating ? '生成中...' : '音声を生成する';
     }
 
-    const progressBar = document.querySelector('[data-testid="progress-bar"]');
+    const progressBar = this.#getDocument()?.querySelector('[data-testid="progress-bar"]');
     if (progressBar) {
       progressBar.style.display = isGenerating ? 'block' : 'none';
+      if (!isGenerating) {
+        progressBar.classList.remove('error');
+      }
     }
 
     if (!isGenerating) {
       this.updateProgressIndicator(0);
+      this.setProgressStatusText('');
     }
 
     if (this.elements.scriptTextarea) {
@@ -126,8 +158,9 @@ export class GenerationController {
       return '原稿が短すぎます。もう少し長い文章を入力してください。';
     }
 
-    const speakerAName = document.getElementById('speaker-a-name').value.trim();
-    const speakerBName = document.getElementById('speaker-b-name').value.trim();
+    const doc = this.#getDocument();
+    const speakerAName = doc?.getElementById('speaker-a-name').value.trim();
+    const speakerBName = doc?.getElementById('speaker-b-name').value.trim();
 
     const hasMultipleSpeakers = script.includes(':');
 
@@ -163,7 +196,7 @@ export class GenerationController {
   };
 
   updateModelSafetyNotice = () => {
-    const notice = document.getElementById('model-warning');
+    const notice = this.#getDocument()?.getElementById('model-warning');
     if (!notice) return;
 
     const isPro = PRO_TTS_MODELS.has(this.appState.settings.selectedModel);
@@ -171,7 +204,7 @@ export class GenerationController {
   };
 
   updateModelCostDisplay = () => {
-    const display = document.getElementById('model-cost-display');
+    const display = this.#getDocument()?.getElementById('model-cost-display');
     if (!display) return;
 
     const pricing = MODEL_PRICING[this.appState.settings.selectedModel];
@@ -442,7 +475,8 @@ export class GenerationController {
     }
 
     const voiceSelectId = `speaker-${speaker}-voice`;
-    const voiceSelect = document.getElementById(voiceSelectId);
+    const doc = this.#getDocument();
+    const voiceSelect = doc?.getElementById(voiceSelectId);
 
     if (!voiceSelect) {
       console.error(`Voice select element not found: ${voiceSelectId}`);
@@ -450,7 +484,7 @@ export class GenerationController {
     }
 
     const selectedVoice = voiceSelect.value;
-    const previewButton = document.querySelector(`[data-testid="preview-voice-${speaker}"]`);
+    const previewButton = doc?.querySelector(`[data-testid="preview-voice-${speaker}"]`);
     const originalButtonText = previewButton ? previewButton.textContent : '▶ 試聴';
 
     if (previewButton) {

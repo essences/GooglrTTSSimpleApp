@@ -41,6 +41,7 @@ export const cacheDomElements = () => {
   elements.slideCurrent = document.getElementById('current-section');
   elements.slideTotal = document.getElementById('total-sections');
   elements.progressStatus = document.getElementById('progress-status');
+  elements.progressPercent = document.getElementById('progress-percent');
 
   confirmButtonDefaults.text = elements.confirmPrimaryButton?.textContent || 'OK';
   confirmButtonDefaults.variant = 'primary';

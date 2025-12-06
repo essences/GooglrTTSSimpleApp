@@ -1,11 +1,18 @@
 import { SAMPLE_SCRIPT } from '../config/constants.js';
-import { elements } from '../ui/dom-elements.js';
+import { elements as defaultElements } from '../ui/dom-elements.js';
 
 export class ScriptController {
-  constructor({ appState, openConfirmDialog }) {
+  constructor({
+    appState,
+    openConfirmDialog,
+    elementsRef = defaultElements,
+    documentRef = typeof document !== 'undefined' ? document : null
+  }) {
     this.appState = appState;
     this.openConfirmDialog = openConfirmDialog;
     this.listeners = [];
+    this.elements = elementsRef;
+    this.documentRef = documentRef;
   }
 
   addListener = (element, event, handler) => {
@@ -15,10 +22,10 @@ export class ScriptController {
   };
 
   init = () => {
-    this.addListener(elements.scriptTextarea, 'input', this.updateCharCount);
-    this.addListener(elements.sampleScriptButton, 'click', this.handleSampleScriptRequest);
+    this.addListener(this.elements.scriptTextarea, 'input', this.updateCharCount);
+    this.addListener(this.elements.sampleScriptButton, 'click', this.handleSampleScriptRequest);
 
-    const importTxtButton = document.querySelector('[data-testid="import-txt-button"]');
+    const importTxtButton = this.documentRef.querySelector('[data-testid="import-txt-button"]');
     this.addListener(importTxtButton, 'click', this.handleImportTxt);
   };
 
@@ -30,17 +37,17 @@ export class ScriptController {
   };
 
   updateCharCount = () => {
-    const text = elements.scriptTextarea.value;
+    const text = this.elements.scriptTextarea.value;
     this.appState.currentScript = text;
-    if (elements.charCount) {
-      elements.charCount.textContent = text.length.toLocaleString();
+    if (this.elements.charCount) {
+      this.elements.charCount.textContent = text.length.toLocaleString();
     }
   };
 
   applyImportedText = (text) => {
-    elements.scriptTextarea.value = text;
+    this.elements.scriptTextarea.value = text;
     this.updateCharCount();
-    elements.scriptTextarea.focus();
+    this.elements.scriptTextarea.focus();
     console.log('TXT ファイルを読み込みました');
   };
 
@@ -73,7 +80,7 @@ export class ScriptController {
           return;
         }
 
-        const existing = elements.scriptTextarea.value.trim();
+        const existing = this.elements.scriptTextarea.value.trim();
         if (existing.length > 0) {
           this.openConfirmDialog(
             `現在の原稿を "${file.name}" の内容で置き換えます。よろしいですか？`,
@@ -96,13 +103,13 @@ export class ScriptController {
   };
 
   applySampleScript = () => {
-    elements.scriptTextarea.value = SAMPLE_SCRIPT;
+    this.elements.scriptTextarea.value = SAMPLE_SCRIPT;
     this.updateCharCount();
-    elements.scriptTextarea.focus();
+    this.elements.scriptTextarea.focus();
   };
 
   handleSampleScriptRequest = () => {
-    const existing = elements.scriptTextarea.value.trim();
+    const existing = this.elements.scriptTextarea.value.trim();
     if (existing.length > 0 && existing !== SAMPLE_SCRIPT.trim()) {
       this.openConfirmDialog(
         '現在の原稿をサンプルスクリプトで置き換えます。よろしいですか？',

@@ -5,9 +5,26 @@ import {
   API_VALIDATION_TIMEOUT_MS
 } from '../config/constants.js';
 
+function createMockTtsClient() {
+  return {
+    generateSingleSpeaker: async ({ text, voiceName }) => ({
+      blob: new Blob([text || 'mock'], { type: 'audio/wav' }),
+      mimeType: 'audio/wav',
+      usage: null,
+      voiceName
+    }),
+    generateMultiSpeaker: async ({ prompt }) => ({
+      blob: new Blob([prompt || 'mock'], { type: 'audio/wav' }),
+      mimeType: 'audio/wav',
+      usage: null
+    })
+  };
+}
+
 export class GeminiService {
-  constructor({ client = new GeminiTtsClient(), fetchFn = fetch } = {}) {
-    this.client = client;
+  constructor({ client = null, fetchFn = fetch } = {}) {
+    const useMock = typeof globalThis !== 'undefined' && globalThis.__MOCK_TTS__;
+    this.client = client || (useMock ? createMockTtsClient() : new GeminiTtsClient());
     this.fetchFn = fetchFn;
   }
 

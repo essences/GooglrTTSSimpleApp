@@ -13,8 +13,10 @@ export class AudioController {
     refreshHistoryTable,
     setGeneratingState,
     getSectionsFromRecord,
-    documentRef = document,
-    triggerBlobDownload = defaultTriggerBlobDownload
+    documentRef = typeof document !== 'undefined' ? document : null,
+    triggerBlobDownload = defaultTriggerBlobDownload,
+    confirmFn = typeof confirm !== 'undefined' ? confirm : () => true,
+    alertFn = typeof alert !== 'undefined' ? alert : () => {}
   }) {
     this.appState = appState;
     this.getSpeakerConfiguration = getSpeakerConfiguration;
@@ -29,6 +31,8 @@ export class AudioController {
     this.getSectionsFromRecord = getSectionsFromRecord;
     this.documentRef = documentRef;
     this.triggerBlobDownload = triggerBlobDownload;
+    this.confirmFn = confirmFn;
+    this.alertFn = alertFn;
   }
 
   handlePlayAudio = () => {
@@ -64,7 +68,7 @@ export class AudioController {
     const currentSection = this.appState.generatedSections[this.appState.currentSectionIndex];
 
     if (!currentSection || !currentSection.blob) {
-      alert('ダウンロードする音声がありません。');
+      this.alertFn('ダウンロードする音声がありません。');
       return;
     }
 
@@ -78,7 +82,7 @@ export class AudioController {
 
     const sections = this.getSectionsFromRecord(record);
     if (!sections.length) {
-      alert('再生できるセクションが見つかりません。');
+      this.alertFn('再生できるセクションが見つかりません。');
       return;
     }
 
@@ -87,7 +91,7 @@ export class AudioController {
     this.appState.activeHistoryId = record.id;
     this.showSectionPreview(this.appState.generatedSections[0], 1, this.appState.generatedSections.length);
     if (!this.appState.generatedSections[0].blob) {
-      alert('この履歴には音声データが保存されていません。再生するには再生成を行ってください。');
+      this.alertFn('この履歴には音声データが保存されていません。再生するには再生成を行ってください。');
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -95,14 +99,14 @@ export class AudioController {
   handleHistoryAudioDownload = (entryId) => {
     const record = this.appState.history.find((item) => item.id === entryId);
     if (!record) {
-      alert('この履歴が見つかりません。');
+      this.alertFn('この履歴が見つかりません。');
       return;
     }
 
     const sections = this.getSectionsFromRecord(record);
     const targetSection = sections.find((section) => section.blob);
     if (!targetSection) {
-      alert('この履歴の音声データは現在のセッションではダウンロードできません。');
+      this.alertFn('この履歴の音声データは現在のセッションではダウンロードできません。');
       return;
     }
 
@@ -111,18 +115,18 @@ export class AudioController {
 
   handleRegenerateSection = async () => {
     if (!Array.isArray(this.appState.generatedSections) || this.appState.generatedSections.length === 0) {
-      alert('再生成できるセクションがありません。');
+      this.alertFn('再生成できるセクションがありません。');
       return;
     }
 
     const targetIndex = this.appState.currentSectionIndex;
     const targetSection = this.appState.generatedSections[targetIndex];
     if (!targetSection) {
-      alert('再生成対象のセクションが見つかりません。');
+      this.alertFn('再生成対象のセクションが見つかりません。');
       return;
     }
 
-    const confirmed = confirm('現在のセクションを再生成しますか？');
+    const confirmed = this.confirmFn('現在のセクションを再生成しますか？');
     if (!confirmed) return;
 
     try {
@@ -136,10 +140,10 @@ export class AudioController {
       this.showSectionPreview(updatedRecord, targetIndex + 1, this.appState.generatedSections.length);
       this.updateHistorySectionRecord(this.appState.activeHistoryId, targetIndex, updatedRecord);
       this.refreshHistoryTable();
-      alert('セクションを再生成しました。');
+      this.alertFn('セクションを再生成しました。');
     } catch (error) {
       console.error('セクションの再生成に失敗しました:', error);
-      alert(`セクションの再生成に失敗しました: ${error.message || error}`);
+      this.alertFn(`セクションの再生成に失敗しました: ${error.message || error}`);
     } finally {
       this.setGeneratingState(false);
     }

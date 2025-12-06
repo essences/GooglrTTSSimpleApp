@@ -16,7 +16,7 @@ export class ApiKeyController {
     showMainApp,
     showApiKeyModal,
     openConfirmDialog,
-    documentRef = document,
+    documentRef = typeof document !== 'undefined' ? document : null,
     elementsRef = elements
   }) {
     this.appState = appState;

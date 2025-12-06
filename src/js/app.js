@@ -143,6 +143,14 @@ function setupEventListeners() {
     });
   }
 
+  const outputFormatSelect = document.getElementById('output-format');
+  if (outputFormatSelect) {
+    outputFormatSelect.addEventListener('change', (event) => {
+      appState.settings.outputFormat = event.target.value;
+    });
+    outputFormatSelect.value = appState.settings.outputFormat || 'wav';
+  }
+
   const temperatureInput = document.getElementById('temperature');
   const temperatureValue = document.getElementById('temperature-value');
   if (temperatureInput && temperatureValue) {
@@ -150,6 +158,14 @@ function setupEventListeners() {
       temperatureValue.textContent = event.target.value;
       appState.settings.temperature = parseFloat(event.target.value);
     });
+  }
+
+  const sectionSplitSelect = document.getElementById('section-split');
+  if (sectionSplitSelect) {
+    sectionSplitSelect.addEventListener('change', (event) => {
+      appState.settings.sectionSplit = event.target.value;
+    });
+    sectionSplitSelect.value = appState.settings.sectionSplit || 'auto';
   }
 
   elements.settingsButton.addEventListener('click', () => {
@@ -252,7 +268,8 @@ function handleNextSection() {
   showSectionByIndex(appState, appState.currentSectionIndex + 1);
 }
 
-document.addEventListener('DOMContentLoaded', initApp);
-
-window.appState = appState;
-console.log('app.js ロード完了');
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', initApp);
+  window.appState = appState;
+  console.log('app.js ロード完了');
+}

@@ -31,3 +31,9 @@
 - シナリオ: APIキー設定 → サンプル原稿入力 → 生成ボタン → 進捗完了 → プレビュー再生 → ダウンロード → 履歴から再生/ダウンロード。
 - 結果: すべて成功（ブラウザ手動）。回帰なし。
 - 備考: destroy 経路は未使用（リロード時にブラウザが破棄）。今後 destroy 呼び出しが必要な場合はチェックリスト追加。
+
+## インターフェース定義
+- `Doc/service-interfaces.md` に TTS/Storage/History/Audio/Formatter/ScriptUtils のインターフェース指針を記載。DI で差し替える際はここを参照。
+
+## モック煙テスト
+- Playwright モック煙テストを `tests/e2e/mock-smoke.spec.js` に追加。`MOCK_E2E=1` を指定し、`window.__MOCK_TTS__` により外部ネットワークへ依存せずに生成フローを確認できる。
