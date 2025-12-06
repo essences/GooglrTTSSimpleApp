@@ -27,18 +27,45 @@ import { renderHistoryTable } from '../ui/history-view.js';
 import { showSectionPreview, showGenerationCompleteMessage } from '../ui/section-preview.js';
 import { elements } from '../ui/dom-elements.js';
 
-const geminiClient = getGeminiClient();
+export class GenerationController {
+  constructor({ appState, getSpeakerConfiguration }) {
+    this.appState = appState;
+    this.getSpeakerConfiguration = getSpeakerConfiguration;
+    this.geminiClient = getGeminiClient();
+    this.listeners = [];
+  }
 
-export function createGenerationController({ appState, getSpeakerConfiguration }) {
-  function updateProgressIndicator(percent) {
+  addListener = (element, event, handler) => {
+    if (!element) return;
+    element.addEventListener(event, handler);
+    this.listeners.push({ element, event, handler });
+  };
+
+  init = () => {
+    this.addListener(elements.generateButton, 'click', this.handleGenerateAudio);
+
+    const previewVoiceAButton = document.querySelector('[data-testid="preview-voice-a"]');
+    const previewVoiceBButton = document.querySelector('[data-testid="preview-voice-b"]');
+    this.addListener(previewVoiceAButton, 'click', () => this.handlePreviewVoice('a'));
+    this.addListener(previewVoiceBButton, 'click', () => this.handlePreviewVoice('b'));
+  };
+
+  destroy = () => {
+    this.listeners.forEach(({ element, event, handler }) => {
+      element.removeEventListener(event, handler);
+    });
+    this.listeners = [];
+  };
+
+  updateProgressIndicator = (percent) => {
     const fill = document.getElementById('progress-bar-fill');
     if (fill) {
       const clamped = Math.max(0, Math.min(100, percent || 0));
       fill.style.width = `${clamped}%`;
     }
-  }
+  };
 
-  function setProgressStatusText(text = '', { isError = false } = {}) {
+  setProgressStatusText = (text = '', { isError = false } = {}) => {
     const statusElement = elements.progressStatus;
     if (!statusElement) return;
 
@@ -51,9 +78,9 @@ export function createGenerationController({ appState, getSpeakerConfiguration }
       statusElement.style.display = 'none';
       statusElement.classList.remove('error');
     }
-  }
+  };
 
-  function setGeneratingState(isGenerating) {
+  setGeneratingState = (isGenerating) => {
     if (elements.generateButton) {
       elements.generateButton.disabled = isGenerating;
       elements.generateButton.textContent = isGenerating ? '生成中...' : '音声を生成する';
@@ -65,15 +92,15 @@ export function createGenerationController({ appState, getSpeakerConfiguration }
     }
 
     if (!isGenerating) {
-      updateProgressIndicator(0);
+      this.updateProgressIndicator(0);
     }
 
     if (elements.scriptTextarea) {
       elements.scriptTextarea.disabled = isGenerating;
     }
-  }
+  };
 
-  function validateGenerationInputs() {
+  validateGenerationInputs = () => {
     const script = elements.scriptTextarea.value.trim();
 
     if (!script) {
@@ -118,21 +145,21 @@ export function createGenerationController({ appState, getSpeakerConfiguration }
     }
 
     return null;
-  }
+  };
 
-  function updateModelSafetyNotice() {
+  updateModelSafetyNotice = () => {
     const notice = document.getElementById('model-warning');
     if (!notice) return;
 
-    const isPro = PRO_TTS_MODELS.has(appState.settings.selectedModel);
+    const isPro = PRO_TTS_MODELS.has(this.appState.settings.selectedModel);
     notice.style.display = isPro ? 'block' : 'none';
-  }
+  };
 
-  function updateModelCostDisplay() {
+  updateModelCostDisplay = () => {
     const display = document.getElementById('model-cost-display');
     if (!display) return;
 
-    const pricing = MODEL_PRICING[appState.settings.selectedModel];
+    const pricing = MODEL_PRICING[this.appState.settings.selectedModel];
     if (!pricing) {
       display.textContent = '料金情報がありません';
       return;
@@ -145,15 +172,15 @@ export function createGenerationController({ appState, getSpeakerConfiguration }
 
     display.textContent = `入力: $${inputUsd.toFixed(2)} (約${inputJpy}円) /100万テキストトークン、出力: $${outputUsd.toFixed(2)} (約${outputJpy}円) /100万音声トークン`;
 
-    updateModelSafetyNotice();
-  }
+    this.updateModelSafetyNotice();
+  };
 
-  async function generateAudioViaServer(script, speakerConfig) {
-    if (!appState.apiKey) {
+  generateAudioViaServer = async (script, speakerConfig) => {
+    if (!this.appState.apiKey) {
       throw new Error('APIキーが設定されていません。設定からキーを入力してください。');
     }
 
-    setProgressStatusText('Gemini 2.5 Pro TTS を呼び出しています...');
+    this.setProgressStatusText('Gemini 2.5 Pro TTS を呼び出しています...');
 
     let response;
     try {
@@ -163,13 +190,13 @@ export function createGenerationController({ appState, getSpeakerConfiguration }
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          apiKey: appState.apiKey,
+          apiKey: this.appState.apiKey,
           script,
           speakerConfig,
           generationConfig: {
-            temperature: appState.settings.temperature
+            temperature: this.appState.settings.temperature
           },
-          model: appState.settings.selectedModel
+          model: this.appState.settings.selectedModel
         })
       });
     } catch (networkError) {
@@ -188,14 +215,14 @@ export function createGenerationController({ appState, getSpeakerConfiguration }
       script,
       timestamp: new Date().toISOString(),
       speakers: normalizeSpeakersRecord(speakerConfig),
-      modelName: data.modelName || appState.settings.selectedModel,
+      modelName: data.modelName || this.appState.settings.selectedModel,
       usage: data.usage || null
     };
-  }
+  };
 
-  async function generateAudioFromScript(script, speakerConfig) {
-    if (PRO_TTS_MODELS.has(appState.settings.selectedModel)) {
-      return generateAudioViaServer(script, speakerConfig);
+  generateAudioFromScript = async (script, speakerConfig) => {
+    if (PRO_TTS_MODELS.has(this.appState.settings.selectedModel)) {
+      return this.generateAudioViaServer(script, speakerConfig);
     }
 
     const segments = parseSpeakerSegments(script);
@@ -225,7 +252,7 @@ export function createGenerationController({ appState, getSpeakerConfiguration }
         })
         .join('\n');
 
-      const result = await geminiClient.generateMultiSpeaker({
+      const result = await this.geminiClient.generateMultiSpeaker({
         prompt: multiSpeakerScript,
         speakerConfigs: [
           {
@@ -243,11 +270,11 @@ export function createGenerationController({ appState, getSpeakerConfiguration }
       usageMetadata = result.usage;
     } else {
       const voiceName = speakerConfig.speakerA.voice || 'Kore';
-      const result = await geminiClient.generateSingleSpeaker({
+      const result = await this.geminiClient.generateSingleSpeaker({
         text: script,
         voiceName,
         generationConfig: {
-          temperature: appState.settings.temperature
+          temperature: this.appState.settings.temperature
         }
       });
       audioBlob = result.blob;
@@ -261,20 +288,26 @@ export function createGenerationController({ appState, getSpeakerConfiguration }
       script,
       timestamp: new Date().toISOString(),
       speakers: normalizeSpeakersRecord(speakerConfig),
-      modelName: appState.settings.selectedModel,
+      modelName: this.appState.settings.selectedModel,
       usage: usageMetadata
     };
-  }
+  };
 
-  async function generateSectionWithRetries(sectionText, speakerConfig, sectionNumber, totalSections, maxRetries = MAX_SECTION_RETRIES) {
+  generateSectionWithRetries = async (
+    sectionText,
+    speakerConfig,
+    sectionNumber,
+    totalSections,
+    maxRetries = MAX_SECTION_RETRIES
+  ) => {
     let attempt = 0;
     let lastError = null;
 
     while (attempt <= maxRetries) {
       const attemptLabel = `${sectionNumber}/${totalSections} (試行${attempt + 1})`;
       try {
-        setProgressStatusText(`セクション ${attemptLabel} を生成中...`);
-        const result = await generateAudioFromScript(sectionText, speakerConfig);
+        this.setProgressStatusText(`セクション ${attemptLabel} を生成中...`);
+        const result = await this.generateAudioFromScript(sectionText, speakerConfig);
         const duration = await getAudioDuration(result.blob);
         const costInfo = calculateCostDetails(result.usage, result.script, duration, result.modelName);
         return createSectionRecord(result, duration, costInfo);
@@ -286,50 +319,58 @@ export function createGenerationController({ appState, getSpeakerConfiguration }
         }
         const waitMs = RETRY_DELAY_BASE_MS * attempt;
         const waitSeconds = (waitMs / 1000).toFixed(1);
-        console.warn(`セクション ${sectionNumber}/${totalSections} の生成に失敗。${waitSeconds}s 後に再試行 (${attempt}/${maxRetries + 1})`, error);
-        setProgressStatusText(`セクション ${sectionNumber}/${totalSections} の生成に失敗。${waitSeconds}秒後に再試行 (${attempt}/${maxRetries + 1})`, { isError: true });
+        console.warn(
+          `セクション ${sectionNumber}/${totalSections} の生成に失敗。${waitSeconds}s 後に再試行 (${attempt}/${maxRetries + 1})`,
+          error
+        );
+        this.setProgressStatusText(
+          `セクション ${sectionNumber}/${totalSections} の生成に失敗。${waitSeconds}秒後に再試行 (${attempt}/${maxRetries + 1})`,
+          { isError: true }
+        );
         await delay(waitMs);
       }
     }
 
     const errorMessage = lastError instanceof Error ? lastError.message : '不明なエラー';
-    throw new Error(`セクション ${sectionNumber}/${totalSections} の生成に失敗しました (${maxRetries + 1}回試行)。${errorMessage}`);
-  }
+    throw new Error(
+      `セクション ${sectionNumber}/${totalSections} の生成に失敗しました (${maxRetries + 1}回試行)。${errorMessage}`
+    );
+  };
 
-  async function displayGeneratedSections(sectionRecords, fullScript) {
+  displayGeneratedSections = async (sectionRecords, fullScript) => {
     if (!Array.isArray(sectionRecords) || sectionRecords.length === 0) {
       alert('生成結果がありませんでした。');
       return;
     }
 
-    appState.generatedSections = sectionRecords;
-    appState.currentSectionIndex = 0;
+    this.appState.generatedSections = sectionRecords;
+    this.appState.currentSectionIndex = 0;
 
     showSectionPreview(sectionRecords[0], 1, sectionRecords.length);
 
     const historyRecord = createHistoryRunRecord(
       sectionRecords,
       fullScript,
-      appState.settings.selectedModel
+      this.appState.settings.selectedModel
     );
-    appState.activeHistoryId = historyRecord.id;
-    addHistoryEntry(appState.history, historyRecord);
-    renderHistoryTable(appState.history, getSectionsFromRecord);
+    this.appState.activeHistoryId = historyRecord.id;
+    addHistoryEntry(this.appState.history, historyRecord);
+    renderHistoryTable(this.appState.history, getSectionsFromRecord);
     showGenerationCompleteMessage();
-  }
+  };
 
-  async function handleGenerateAudio() {
+  handleGenerateAudio = async () => {
     console.log('音声生成を開始します...');
 
     try {
-      const validationError = validateGenerationInputs();
+      const validationError = this.validateGenerationInputs();
       if (validationError) {
         alert(validationError);
         return;
       }
 
-      const speakerConfig = getSpeakerConfiguration();
-      const script = appState.currentScript;
+      const speakerConfig = this.getSpeakerConfiguration();
+      const script = this.appState.currentScript;
 
       const sectionsToGenerate = splitScriptIntoSections(script);
       if (sectionsToGenerate.length === 0) {
@@ -337,15 +378,15 @@ export function createGenerationController({ appState, getSpeakerConfiguration }
         return;
       }
 
-      setGeneratingState(true);
-      updateProgressIndicator(0);
-      setProgressStatusText(`セクション 1/${sectionsToGenerate.length} の準備を開始します...`);
+      this.setGeneratingState(true);
+      this.updateProgressIndicator(0);
+      this.setProgressStatusText(`セクション 1/${sectionsToGenerate.length} の準備を開始します...`);
 
       const generatedSections = [];
 
       for (let index = 0; index < sectionsToGenerate.length; index += 1) {
         const sectionText = sectionsToGenerate[index];
-        const sectionRecord = await generateSectionWithRetries(
+        const sectionRecord = await this.generateSectionWithRetries(
           sectionText,
           speakerConfig,
           index + 1,
@@ -354,23 +395,25 @@ export function createGenerationController({ appState, getSpeakerConfiguration }
         generatedSections.push(sectionRecord);
 
         const progressPercent = Math.round(((index + 1) / sectionsToGenerate.length) * 100);
-        updateProgressIndicator(progressPercent);
-        setProgressStatusText(`セクション ${index + 1}/${sectionsToGenerate.length} の生成が完了しました (${progressPercent}%)`);
+        this.updateProgressIndicator(progressPercent);
+        this.setProgressStatusText(
+          `セクション ${index + 1}/${sectionsToGenerate.length} の生成が完了しました (${progressPercent}%)`
+        );
       }
 
-      await displayGeneratedSections(generatedSections, script);
-      setProgressStatusText('全セクションの生成が完了しました。');
+      await this.displayGeneratedSections(generatedSections, script);
+      this.setProgressStatusText('全セクションの生成が完了しました。');
     } catch (error) {
       console.error('音声生成エラー:', error);
-      setProgressStatusText('音声生成でエラーが発生しました。', { isError: true });
+      this.setProgressStatusText('音声生成でエラーが発生しました。', { isError: true });
       alert(`音声生成に失敗しました: ${error.message}`);
     } finally {
-      setGeneratingState(false);
+      this.setGeneratingState(false);
     }
-  }
+  };
 
-  async function handlePreviewVoice(speaker) {
-    if (!appState.apiKey) {
+  handlePreviewVoice = async (speaker) => {
+    if (!this.appState.apiKey) {
       alert('APIキーが設定されていません。設定メニューからAPIキーを入力してください。');
       return;
     }
@@ -393,7 +436,7 @@ export function createGenerationController({ appState, getSpeakerConfiguration }
     }
 
     try {
-      const result = await geminiClient.generateSingleSpeaker({
+      const result = await this.geminiClient.generateSingleSpeaker({
         text: VOICE_PREVIEW_TEXT,
         voiceName: selectedVoice,
         languageCode: 'ja-JP'
@@ -417,13 +460,9 @@ export function createGenerationController({ appState, getSpeakerConfiguration }
         previewButton.textContent = originalButtonText;
       }
     }
-  }
-
-  return {
-    handleGenerateAudio,
-    handlePreviewVoice,
-    setGeneratingState,
-    generateAudioFromScript,
-    updateModelCostDisplay
   };
+}
+
+export function createGenerationController(options) {
+  return new GenerationController(options);
 }

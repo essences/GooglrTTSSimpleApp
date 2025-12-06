@@ -1,5 +1,29 @@
-export function createSpeakerController({ appState, saveSpeakerSettingsToStorage }) {
-  function getSpeakerConfiguration() {
+export class SpeakerController {
+  constructor({ appState, saveSpeakerSettingsToStorage }) {
+    this.appState = appState;
+    this.saveSpeakerSettingsToStorage = saveSpeakerSettingsToStorage;
+    this.listeners = [];
+  }
+
+  addListener = (element, event, handler) => {
+    if (!element) return;
+    element.addEventListener(event, handler);
+    this.listeners.push({ element, event, handler });
+  };
+
+  init = () => {
+    this.applySettingsToInputs();
+    this.registerInputListeners();
+  };
+
+  destroy = () => {
+    this.listeners.forEach(({ element, event, handler }) => {
+      element.removeEventListener(event, handler);
+    });
+    this.listeners = [];
+  };
+
+  getSpeakerConfiguration = () => {
     const speakerAName = document.getElementById('speaker-a-name').value.trim();
     const speakerAVoice = document.getElementById('speaker-a-voice').value;
     const speakerAStyle = document.getElementById('speaker-a-style').value.trim();
@@ -8,25 +32,25 @@ export function createSpeakerController({ appState, saveSpeakerSettingsToStorage
     const speakerBVoice = document.getElementById('speaker-b-voice').value;
     const speakerBStyle = document.getElementById('speaker-b-style').value.trim();
 
-    appState.speakers.a = {
+    this.appState.speakers.a = {
       name: speakerAName,
       voice: speakerAVoice,
       style: speakerAStyle
     };
 
-    appState.speakers.b = {
+    this.appState.speakers.b = {
       name: speakerBName,
       voice: speakerBVoice,
       style: speakerBStyle
     };
 
     return {
-      speakerA: appState.speakers.a,
-      speakerB: appState.speakers.b
+      speakerA: this.appState.speakers.a,
+      speakerB: this.appState.speakers.b
     };
-  }
+  };
 
-  function applySettingsToInputs() {
+  applySettingsToInputs = () => {
     const aName = document.getElementById('speaker-a-name');
     const aVoice = document.getElementById('speaker-a-voice');
     const aStyle = document.getElementById('speaker-a-style');
@@ -34,19 +58,19 @@ export function createSpeakerController({ appState, saveSpeakerSettingsToStorage
     const bVoice = document.getElementById('speaker-b-voice');
     const bStyle = document.getElementById('speaker-b-style');
 
-    if (aName) aName.value = appState.speakers.a.name;
-    if (aVoice) aVoice.value = appState.speakers.a.voice;
-    if (aStyle) aStyle.value = appState.speakers.a.style;
-    if (bName) bName.value = appState.speakers.b.name;
-    if (bVoice) bVoice.value = appState.speakers.b.voice;
-    if (bStyle) bStyle.value = appState.speakers.b.style;
-  }
+    if (aName) aName.value = this.appState.speakers.a.name;
+    if (aVoice) aVoice.value = this.appState.speakers.a.voice;
+    if (aStyle) aStyle.value = this.appState.speakers.a.style;
+    if (bName) bName.value = this.appState.speakers.b.name;
+    if (bVoice) bVoice.value = this.appState.speakers.b.voice;
+    if (bStyle) bStyle.value = this.appState.speakers.b.style;
+  };
 
-  function persistSpeakerSettings() {
-    saveSpeakerSettingsToStorage(appState.speakers);
-  }
+  persistSpeakerSettings = () => {
+    this.saveSpeakerSettingsToStorage(this.appState.speakers);
+  };
 
-  function registerInputListeners() {
+  registerInputListeners = () => {
     const mappings = [
       { id: 'speaker-a-name', key: 'a', field: 'name', event: 'input' },
       { id: 'speaker-a-voice', key: 'a', field: 'voice', event: 'change' },
@@ -58,19 +82,15 @@ export function createSpeakerController({ appState, saveSpeakerSettingsToStorage
 
     mappings.forEach(({ id, key, field, event }) => {
       const element = document.getElementById(id);
-      if (!element) return;
-
-      element.addEventListener(event, () => {
+      this.addListener(element, event, () => {
         const value = field === 'voice' ? element.value : element.value.trim();
-        appState.speakers[key][field] = value;
-        persistSpeakerSettings();
+        this.appState.speakers[key][field] = value;
+        this.persistSpeakerSettings();
       });
     });
-  }
-
-  return {
-    getSpeakerConfiguration,
-    applySettingsToInputs,
-    registerInputListeners
   };
+}
+
+export function createSpeakerController(options) {
+  return new SpeakerController(options);
 }

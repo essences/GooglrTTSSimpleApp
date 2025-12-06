@@ -1,23 +1,50 @@
 import { SAMPLE_SCRIPT } from '../config/constants.js';
 import { elements } from '../ui/dom-elements.js';
 
-export function createScriptController({ appState, openConfirmDialog }) {
-  function updateCharCount() {
+export class ScriptController {
+  constructor({ appState, openConfirmDialog }) {
+    this.appState = appState;
+    this.openConfirmDialog = openConfirmDialog;
+    this.listeners = [];
+  }
+
+  addListener = (element, event, handler) => {
+    if (!element) return;
+    element.addEventListener(event, handler);
+    this.listeners.push({ element, event, handler });
+  };
+
+  init = () => {
+    this.addListener(elements.scriptTextarea, 'input', this.updateCharCount);
+    this.addListener(elements.sampleScriptButton, 'click', this.handleSampleScriptRequest);
+
+    const importTxtButton = document.querySelector('[data-testid="import-txt-button"]');
+    this.addListener(importTxtButton, 'click', this.handleImportTxt);
+  };
+
+  destroy = () => {
+    this.listeners.forEach(({ element, event, handler }) => {
+      element.removeEventListener(event, handler);
+    });
+    this.listeners = [];
+  };
+
+  updateCharCount = () => {
     const text = elements.scriptTextarea.value;
-    appState.currentScript = text;
+    this.appState.currentScript = text;
     if (elements.charCount) {
       elements.charCount.textContent = text.length.toLocaleString();
     }
-  }
+  };
 
-  function applyImportedText(text) {
+  applyImportedText = (text) => {
     elements.scriptTextarea.value = text;
-    updateCharCount();
+    this.updateCharCount();
     elements.scriptTextarea.focus();
     console.log('TXT ファイルを読み込みました');
-  }
+  };
 
-  function handleImportTxt() {
+  handleImportTxt = () => {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.txt,text/plain';
@@ -48,13 +75,13 @@ export function createScriptController({ appState, openConfirmDialog }) {
 
         const existing = elements.scriptTextarea.value.trim();
         if (existing.length > 0) {
-          openConfirmDialog(
+          this.openConfirmDialog(
             `現在の原稿を "${file.name}" の内容で置き換えます。よろしいですか？`,
-            () => applyImportedText(text),
+            () => this.applyImportedText(text),
             { confirmText: '読み込む', variant: 'primary' }
           );
         } else {
-          applyImportedText(text);
+          this.applyImportedText(text);
         }
       };
 
@@ -66,30 +93,28 @@ export function createScriptController({ appState, openConfirmDialog }) {
     });
 
     fileInput.click();
-  }
+  };
 
-  function applySampleScript() {
+  applySampleScript = () => {
     elements.scriptTextarea.value = SAMPLE_SCRIPT;
-    updateCharCount();
+    this.updateCharCount();
     elements.scriptTextarea.focus();
-  }
+  };
 
-  function handleSampleScriptRequest() {
+  handleSampleScriptRequest = () => {
     const existing = elements.scriptTextarea.value.trim();
     if (existing.length > 0 && existing !== SAMPLE_SCRIPT.trim()) {
-      openConfirmDialog(
+      this.openConfirmDialog(
         '現在の原稿をサンプルスクリプトで置き換えます。よろしいですか？',
-        applySampleScript,
+        this.applySampleScript,
         { confirmText: '読み込む', variant: 'primary' }
       );
       return;
     }
-    applySampleScript();
-  }
-
-  return {
-    updateCharCount,
-    handleImportTxt,
-    handleSampleScriptRequest
+    this.applySampleScript();
   };
+}
+
+export function createScriptController(options) {
+  return new ScriptController(options);
 }

@@ -131,8 +131,6 @@ function setupEventListeners() {
     }
   });
 
-  elements.scriptTextarea.addEventListener('input', scriptController.updateCharCount);
-
   const prevSectionButton = document.querySelector('[data-testid="prev-section-button"]');
   if (prevSectionButton) {
     prevSectionButton.addEventListener('click', handlePrevSection);
@@ -182,15 +180,6 @@ function setupEventListeners() {
     }
   });
 
-  if (elements.sampleScriptButton) {
-    elements.sampleScriptButton.addEventListener('click', scriptController.handleSampleScriptRequest);
-  }
-
-  const importTxtButton = document.querySelector('[data-testid="import-txt-button"]');
-  if (importTxtButton) {
-    importTxtButton.addEventListener('click', scriptController.handleImportTxt);
-  }
-
   if (elements.testApiKeyButton) {
     elements.testApiKeyButton.addEventListener('click', apiKeyController.handleTestApiKey);
   }
@@ -215,10 +204,6 @@ function setupEventListeners() {
 
   document.addEventListener('click', handleGlobalClicks);
 
-  if (elements.generateButton) {
-    elements.generateButton.addEventListener('click', generationController.handleGenerateAudio);
-  }
-
   const playButton = document.querySelector('[data-testid="play-button"]');
   if (playButton) {
     playButton.addEventListener('click', audioController.handlePlayAudio);
@@ -239,17 +224,9 @@ function setupEventListeners() {
     regenerateButton.addEventListener('click', audioController.handleRegenerateSection);
   }
 
-  const previewVoiceAButton = document.querySelector('[data-testid="preview-voice-a"]');
-  if (previewVoiceAButton) {
-    previewVoiceAButton.addEventListener('click', () => generationController.handlePreviewVoice('a'));
-  }
-
-  const previewVoiceBButton = document.querySelector('[data-testid="preview-voice-b"]');
-  if (previewVoiceBButton) {
-    previewVoiceBButton.addEventListener('click', () => generationController.handlePreviewVoice('b'));
-  }
-
-  speakerController.registerInputListeners();
+  scriptController.init();
+  speakerController.init();
+  generationController.init();
 
   console.log('イベントリスナー設定完了');
 }
@@ -287,4 +264,3 @@ document.addEventListener('DOMContentLoaded', initApp);
 
 window.appState = appState;
 console.log('app.js ロード完了');
-
