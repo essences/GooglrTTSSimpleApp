@@ -29,9 +29,10 @@ function createController(dom, opts = {}) {
     generatedSections: [],
     currentSectionIndex: 0,
     history: [],
-    activeHistoryId: null
+    activeHistoryId: null,
+    settings: { outputFormat: 'wav' }
   };
-  const calls = { download: 0, showPreview: 0, refresh: 0 };
+  const calls = { download: 0, showPreview: 0, refresh: 0, fileNames: [] };
   const controller = createAudioController({
     appState,
     getSpeakerConfiguration: () => ({}),
@@ -55,8 +56,9 @@ function createController(dom, opts = {}) {
     setGeneratingState: () => {},
     getSectionsFromRecord: (r) => r.sections || [],
     documentRef: dom.window.document,
-    triggerBlobDownload: () => {
+    triggerBlobDownload: (_blob, name) => {
       calls.download += 1;
+      if (name) calls.fileNames.push(name);
     },
     ...opts
   });
@@ -83,9 +85,20 @@ async function testHandleRegenerateUpdatesSection() {
   assert.ok(appState.generatedSections[0].blob instanceof dom.window.Blob, 'regenerate should set blob');
 }
 
+function testWavMp3Downloads() {
+  const dom = createDom();
+  const { controller, appState, calls } = createController(dom);
+  appState.settings.outputFormat = 'wav+mp3';
+  appState.generatedSections = [{ blob: new dom.window.Blob(['x']), fileName: 'f.wav' }];
+  controller.handleDownloadAudio();
+  assert.equal(calls.download, 2, 'should trigger two downloads for wav+mp3');
+  assert.ok(calls.fileNames.some((n) => n.endsWith('.mp3')), 'mp3 filename should be requested');
+}
+
 async function run() {
   testHandleDownloadUsesTrigger();
   await testHandleRegenerateUpdatesSection();
+  testWavMp3Downloads();
   console.log('audio-controller.unit.js passed');
 }
 

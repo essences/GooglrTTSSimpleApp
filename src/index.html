@@ -237,6 +237,13 @@
           <option value="slide">スライド単位</option>
         </select>
 
+        <label for="safety-profile">Safety Profile</label>
+        <select id="safety-profile" data-testid="safety-profile">
+          <option value="default">Default</option>
+          <option value="strict">Strict</option>
+          <option value="relaxed">Relaxed</option>
+        </select>
+
         <label>API Key</label>
         <input
           type="text"
@@ -259,6 +266,10 @@
           <span id="progress-percent" class="progress-percent">0%</span>
         </div>
         <p id="progress-status" class="progress-status" data-testid="progress-status" style="display: none;"></p>
+        <div class="progress-log">
+          <h4>ステータスログ</h4>
+          <ul id="progress-log"></ul>
+        </div>
 
         <div data-testid="generation-complete" style="display: none;">
           生成完了！

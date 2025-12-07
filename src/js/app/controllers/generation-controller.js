@@ -102,6 +102,21 @@ export class GenerationController {
     }
   };
 
+  renderProgressLogEntry(text, isError) {
+    const logContainer = this.elements.progressLog || this.#getDocument()?.getElementById('progress-log');
+    if (!logContainer) return;
+    const li = this.#getDocument().createElement('li');
+    li.textContent = text;
+    if (isError) {
+      li.classList.add('error');
+    }
+    logContainer.prepend(li);
+    const children = Array.from(logContainer.children);
+    if (children.length > 50) {
+      children.slice(50).forEach((node) => node.remove());
+    }
+  }
+
   setProgressStatusText = (text = '', { isError = false } = {}) => {
     const statusElement = this.elements.progressStatus;
     const doc = this.#getDocument();
@@ -120,6 +135,16 @@ export class GenerationController {
 
     if (progressBar) {
       progressBar.classList.toggle('error', Boolean(isError));
+    }
+
+    if (text) {
+      if (Array.isArray(this.appState.progressLog)) {
+        this.appState.progressLog.unshift({ text, isError, ts: Date.now() });
+        if (this.appState.progressLog.length > 50) {
+          this.appState.progressLog.length = 50;
+        }
+      }
+      this.renderProgressLogEntry(text, isError);
     }
   };
 

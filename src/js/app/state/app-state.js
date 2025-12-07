@@ -6,7 +6,8 @@ export const createInitialSettings = () => ({
   selectedModel: 'gemini-2.5-flash-preview-tts',
   outputFormat: 'wav',
   temperature: 0.6,
-  sectionSplit: 'auto'
+  sectionSplit: 'auto',
+  safetyProfile: 'default'
 });
 
 export const appState = {
@@ -17,7 +18,8 @@ export const appState = {
   history: [],
   generatedSections: [],
   currentSectionIndex: 0,
-  activeHistoryId: null
+  activeHistoryId: null,
+  progressLog: []
 };
 
 export const resetGeneratedSections = () => {

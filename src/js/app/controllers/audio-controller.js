@@ -73,6 +73,10 @@ export class AudioController {
     }
 
     this.triggerBlobDownload(currentSection.blob, currentSection.fileName);
+    if (this.appState.settings?.outputFormat === 'wav+mp3') {
+      const mp3Name = currentSection.fileName.replace(/\.wav$/i, '.mp3');
+      this.triggerBlobDownload(currentSection.blob, mp3Name);
+    }
     console.log('音声をダウンロードしました:', currentSection.fileName);
   };
 
@@ -110,7 +114,12 @@ export class AudioController {
       return;
     }
 
-    this.triggerBlobDownload(targetSection.blob, targetSection.fileName || 'narration.wav');
+    const baseName = targetSection.fileName || 'narration.wav';
+    this.triggerBlobDownload(targetSection.blob, baseName);
+    if (this.appState.settings?.outputFormat === 'wav+mp3') {
+      const mp3Name = baseName.replace(/\.wav$/i, '.mp3');
+      this.triggerBlobDownload(targetSection.blob, mp3Name);
+    }
   };
 
   handleRegenerateSection = async () => {

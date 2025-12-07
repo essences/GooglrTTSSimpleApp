@@ -168,6 +168,14 @@ function setupEventListeners() {
     sectionSplitSelect.value = appState.settings.sectionSplit || 'auto';
   }
 
+  const safetyProfileSelect = document.getElementById('safety-profile');
+  if (safetyProfileSelect) {
+    safetyProfileSelect.addEventListener('change', (event) => {
+      appState.settings.safetyProfile = event.target.value;
+    });
+    safetyProfileSelect.value = appState.settings.safetyProfile || 'default';
+  }
+
   elements.settingsButton.addEventListener('click', () => {
     elements.settingsModal.style.display = 'flex';
   });
