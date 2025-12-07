@@ -7,6 +7,7 @@ function createDom() {
     `
     <div data-testid="progress-bar"><div id="progress-bar-fill"></div><span id="progress-percent"></span></div>
     <div id="progress-status"></div>
+    <ul id="progress-log"></ul>
     <textarea id="script-textarea"></textarea>
     <button id="generate-button"></button>
     `,
@@ -77,6 +78,9 @@ function testErrorStateSetsClass() {
   const status = dom.window.document.getElementById('progress-status');
   assert.ok(bar.classList.contains('error'));
   assert.ok(status.classList.contains('error'));
+   // log should prepend entry
+  const log = dom.window.document.getElementById('progress-log');
+  assert.ok(log.firstChild && log.firstChild.textContent.includes('error'));
   controller.setGeneratingState(false);
   assert.ok(!bar.classList.contains('error'));
   assert.equal(dom.window.document.getElementById('progress-percent').textContent, '0%');

@@ -31,7 +31,7 @@ async function testSingleSpeakerFallsBack() {
   const appState = {
     apiKey: 'dummy',
     currentScript: '',
-    settings: { selectedModel: 'gemini-2.5-flash-preview-tts', temperature: 0.6 }
+    settings: { selectedModel: 'gemini-2.5-flash-preview-tts', temperature: 0.6, safetyProfile: 'strict' }
   };
   const getSpeakerConfiguration = () => ({
     speakerA: { name: 'Alice', voice: 'A-voice', style: '' },
@@ -51,7 +51,7 @@ async function testMultiSpeakerUsesPlaceholders() {
   const appState = {
     apiKey: 'dummy',
     currentScript: '',
-    settings: { selectedModel: 'gemini-2.5-flash-preview-tts', temperature: 0.6 }
+    settings: { selectedModel: 'gemini-2.5-flash-preview-tts', temperature: 0.6, safetyProfile: 'strict' }
   };
   const getSpeakerConfiguration = () => ({
     speakerA: { name: 'Alice', voice: 'A-voice', style: '' },
@@ -65,6 +65,7 @@ async function testMultiSpeakerUsesPlaceholders() {
   const prompt = mock.calls.multi[0].prompt;
   assert.match(prompt, /<speaker name="speaker_a">Alice:/, 'should include speaker_a placeholder');
   assert.match(prompt, /<speaker name="speaker_b">Bob:/, 'should include speaker_b placeholder');
+  assert.equal(mock.calls.multi[0].generationConfig?.safetyProfile, 'strict');
 }
 
 async function run() {

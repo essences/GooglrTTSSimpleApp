@@ -267,7 +267,8 @@ export class GenerationController {
           script,
           speakerConfig,
           generationConfig: {
-            temperature: this.appState.settings.temperature
+            temperature: this.appState.settings.temperature,
+            safetyProfile: this.appState.settings.safetyProfile
           },
           model: this.appState.settings.selectedModel
         })
@@ -336,7 +337,10 @@ export class GenerationController {
             speaker: 'speaker_b',
             voiceName: speakerConfig.speakerB.voice
           }
-        ]
+        ],
+        generationConfig: {
+          safetyProfile: this.appState.settings.safetyProfile
+        }
       });
       audioBlob = result.blob;
       mimeType = result.mimeType;
@@ -347,7 +351,8 @@ export class GenerationController {
         text: script,
         voiceName,
         generationConfig: {
-          temperature: this.appState.settings.temperature
+          temperature: this.appState.settings.temperature,
+          safetyProfile: this.appState.settings.safetyProfile
         }
       });
       audioBlob = result.blob;
@@ -521,7 +526,10 @@ export class GenerationController {
       const result = await this.ttsService.generateSingleSpeaker({
         text: VOICE_PREVIEW_TEXT,
         voiceName: selectedVoice,
-        languageCode: 'ja-JP'
+        languageCode: 'ja-JP',
+        generationConfig: {
+          safetyProfile: this.appState.settings.safetyProfile
+        }
       });
 
       const audioBlob = result.blob;
